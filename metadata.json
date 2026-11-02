@@ -1,0 +1,6 @@
+{
+  "name": "হিজিবিজি পাবলিশার্স | HIJIBIJI PUBLISHERS",
+  "description": "মৌলিক থ্রিলার, সমকালীন উপন্যাস ও কবিতার নতুন সম্ভার - সরাসরি কোলকাতা থেকে দ্রুততম হোম ডেলিভারি ও নিরাপদ পেমেন্ট।",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

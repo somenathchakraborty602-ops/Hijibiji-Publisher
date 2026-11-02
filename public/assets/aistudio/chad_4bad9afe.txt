@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ছাদ | হিজিবিজি পাবলিশার্স</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Noto+Serif+Bengali:wght@600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://sdk.cashfree.com/js/v3/cashfree.js"></script>
+
+  <style>
+    body { font-family: 'Hind Siliguri', sans-serif; }
+    .font-serif-bn { font-family: 'Noto Serif Bengali', serif; }
+  </style>
+</head>
+<body class="bg-amber-50/20 text-stone-900 min-h-screen flex flex-col">
+
+  <!-- টপবার -->
+  <header class="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-amber-100 shadow-sm">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+      <a href="index.html" class="flex items-center gap-2 text-stone-700 hover:text-emerald-900 transition">
+        <i data-lucide="arrow-left" class="w-5 h-5"></i>
+        <span class="text-sm font-semibold">মূল ক্যাটালগে ফিরুন</span>
+      </a>
+
+      <div class="flex items-center gap-2">
+        <span class="w-8 h-8 rounded-lg bg-emerald-800 text-white flex items-center justify-center font-bold font-serif-bn text-sm">হি</span>
+        <span class="font-bold font-serif-bn text-emerald-950 text-base">হিজিবিজি পাবলিশার্স</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- সেলস হিরো সেকশন -->
+  <main class="max-w-5xl mx-auto px-4 py-8 md:py-12 flex-1 w-full space-y-12">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 items-start">
+      
+      <!-- বামদিক: বইয়ের কভার ও ফিচার ব্যাজ -->
+      <div class="space-y-4">
+        <div class="relative bg-white rounded-3xl p-6 shadow-xl border border-stone-200/80 overflow-hidden group">
+          <div class="absolute top-4 left-4 bg-emerald-800 text-amber-300 text-xs font-bold px-3 py-1.5 rounded-full shadow-md z-10">
+            ★ বহুল প্রতীক্ষিত সামাজিক উপন্যাস
+          </div>
+          <img id="book-cover" src="cover.jpg" alt="ছাদ - ছবি ব্যানার্জী" class="w-full h-auto max-h-[480px] object-contain rounded-2xl mx-auto group-hover:scale-105 transition duration-500" onerror="this.src='https://images.unsplash.com/photo-1544947950-fa07a98d237f?auto=format&fit=crop&w=600&q=80'">
+        </div>
+
+        <div class="grid grid-cols-3 gap-3 text-center text-xs">
+          <div class="bg-white p-3 rounded-xl border border-stone-200 shadow-sm">
+            <i data-lucide="truck" class="w-5 h-5 mx-auto text-emerald-800 mb-1"></i>
+            <span class="font-medium text-stone-600">ফ্রি ডেলিভারি</span>
+          </div>
+          <div class="bg-white p-3 rounded-xl border border-stone-200 shadow-sm">
+            <i data-lucide="bookmark-check" class="w-5 h-5 mx-auto text-emerald-800 mb-1"></i>
+            <span class="font-medium text-stone-600">অভিজাত মুদ্রণ</span>
+          </div>
+          <div class="bg-white p-3 rounded-xl border border-stone-200 shadow-sm">
+            <i data-lucide="shield-check" class="w-5 h-5 mx-auto text-emerald-800 mb-1"></i>
+            <span class="font-medium text-stone-600">অরিজিনাল কপি</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ডানদিক: বইয়ের বিবরণ ও অপশন বক্স -->
+      <div class="space-y-6">
+        <div>
+          <div class="inline-flex items-center gap-1.5 text-xs font-bold text-amber-900 bg-amber-100/80 px-2.5 py-1 rounded-md mb-2">
+            <span>মধ্যবিত্ত সমাজের একটি মেয়ের গল্প</span>
+          </div>
+          <h1 id="book-title" class="text-3xl md:text-4xl font-bold font-serif-bn text-stone-900 leading-tight">ছাদ</h1>
+          <p id="book-author" class="text-base text-amber-900 font-semibold mt-1">লেখিকা: ছবি ব্যানার্জী</p>
+          <p id="book-isbn" class="text-xs font-mono text-stone-500 mt-0.5">ISBN: ৯৭৮-৮১-৯৯৬৫৬৪-১-৩</p>
+        </div>
+
+        <!-- ফরম্যাট নির্বাচন (EBook / Paperback / Hardcover) -->
+        <div class="space-y-2">
+          <label class="block text-xs font-bold uppercase tracking-wider text-stone-700">ফরম্যাট নির্বাচন করুন:</label>
+          <div class="grid grid-cols-3 gap-2.5" id="format-selector-grid">
+            <!-- জাভাস্ক্রিপ্ট দ্বারা ডাইনামিক বাটন বসবে -->
+          </div>
+        </div>
+
+        <!-- প্রাইসিং ও অফার হাইলাইট -->
+        <div class="bg-white p-5 rounded-2xl border border-amber-200/80 shadow-sm space-y-1.5">
+          <div class="flex items-baseline gap-3">
+            <span id="book-price-display" class="text-3xl font-bold font-serif-bn text-emerald-900">₹৪৫০</span>
+            <span id="book-mrp-display" class="text-sm text-stone-400 line-through hidden">₹৪৫০</span>
+            <span id="discount-badge" class="bg-red-600 text-white text-xs font-bold px-2 py-0.5 rounded shadow hidden">ছাড়</span>
+          </div>
+          <p class="text-xs text-emerald-800 font-medium">✓ সারা ভারতে ডেলিভারি চার্জ সম্পূর্ণ বিনামূল্যে</p>
+        </div>
+
+        <!-- কাহিনী সংক্ষেপ -->
+        <div class="space-y-2">
+          <h3 class="text-base font-bold font-serif-bn text-stone-900">কাহিনী সংক্ষেপ:</h3>
+          <p id="book-description" class="text-sm text-stone-700 leading-relaxed">
+            'ছাদ' নিছক কোনো ইট-কাঠ-পাথরের আচ্ছাদন নয়; নারীর নিরাপত্তা, ভরসা আর আত্মমর্যাদার পরম আশ্রয়। কন্যাদায়গ্রস্ত মধ্যবিত্তের দেনাপাওনা, পণের নির্মম বলিদান আর পারিবারিক কূটচালে বিক্রি হয়ে যাওয়া সুমিতার লড়াই এক অনন্য দলিল। অসম দাম্পত্যের রূঢ় বাস্তবের মুখে দাঁড়িয়ে নিজের শিক্ষাবঞ্চিত অপূর্ণ স্বপ্নকে শক্তিতে বদলে মেয়ে পারমিতাকে স্বাবলম্বী করে তোলার মাধ্যমে প্রজন্মের পর প্রজন্ম নারীর মুক্তির দিশা দেখায় এই উপন্যাস।
+          </p>
+        </div>
+
+        <!-- কুপন, স্যাম্পল পিডিএফ ও সরাসরি অর্ডার বক্স -->
+        <div class="bg-emerald-50/60 p-5 rounded-2xl border border-emerald-200/60 space-y-4">
+          <div class="space-y-1">
+            <label class="text-xs font-semibold text-emerald-950">কুপন কোড প্রয়োগ করুন</label>
+            <div class="flex gap-2">
+              <input id="single-coupon-input" type="text" placeholder="যেমন: HIJIBIJIPRE" class="flex-1 uppercase text-sm border border-emerald-300 rounded-xl px-3 py-2 outline-none bg-white focus:border-emerald-700" />
+              <button onclick="applySingleCoupon()" class="bg-emerald-900 hover:bg-emerald-950 text-white text-xs font-semibold px-4 py-2 rounded-xl transition">প্রয়োগ</button>
+            </div>
+            <p id="single-coupon-msg" class="text-xs hidden"></p>
+          </div>
+
+          <div class="border-t border-emerald-200/50 pt-3 flex justify-between items-center">
+            <span class="text-sm font-medium text-stone-700">নির্বাচিত ফরম্যাটে প্রদেয়:</span>
+            <span id="single-payable-total" class="text-2xl font-bold font-serif-bn text-emerald-950">₹৪৫০</span>
+          </div>
+
+          <!-- পিডিএফ ওপেন করার বোতাম -->
+          <button id="preview-pdf-btn" onclick="openPreviewPDF()" class="w-full bg-white hover:bg-amber-50 text-emerald-900 border-2 border-emerald-800 font-bold py-3 rounded-xl transition shadow-sm flex items-center justify-center gap-2">
+            <i data-lucide="file-text" class="w-4 h-4 text-emerald-800"></i>
+            <span>বইটির প্রথম কয়েক পাতা পড়ুন (Sample PDF)</span>
+          </button>
+
+          <!-- সরাসরি অর্ডার বোতাম -->
+          <button onclick="openQuickCheckoutModal()" class="w-full bg-emerald-800 hover:bg-emerald-900 text-white text-base font-bold py-3.5 rounded-xl transition shadow-lg flex items-center justify-center gap-2">
+            <i data-lucide="zap" class="w-5 h-5 text-amber-400"></i>
+            <span id="order-btn-text">এখনই সরাসরি অর্ডার করুন</span>
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <!-- সরাসরি ডেলিভারি ও পেমেন্ট মোডাল -->
+  <div id="quick-checkout-modal" class="fixed inset-0 z-50 overflow-y-auto hidden">
+    <div onclick="toggleQuickCheckout(false)" class="fixed inset-0 bg-stone-900/60 backdrop-blur-sm"></div>
+    <div class="flex min-h-full items-center justify-center p-4">
+      <div class="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl p-6 border border-stone-100 z-10">
+        
+        <div class="flex justify-between items-center pb-3 border-b border-stone-100 mb-4">
+          <div>
+            <h3 class="text-lg font-bold font-serif-bn text-stone-900">ডেলিভারির ঠিকানা ও পেমেন্ট</h3>
+            <p id="modal-subtitle" class="text-xs text-stone-500">বই: ছাদ (Paperback)</p>
+          </div>
+          <button onclick="toggleQuickCheckout(false)" class="text-stone-400 hover:text-stone-600">
+            <i data-lucide="x" class="w-5 h-5"></i>
+          </button>
+        </div>
+
+        <form onsubmit="handleSingleBookOrder(event)" class="space-y-4">
+          <div>
+            <label class="block text-xs font-semibold text-stone-700 mb-1">আপনার পুরো নাম *</label>
+            <input required id="q-cust-name" type="text" placeholder="যেমন: সৌমেন রায়" class="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:border-emerald-700 outline-none" />
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-stone-700 mb-1">ফোন / হোয়াটসঅ্যাপ নম্বর *</label>
+              <input required id="q-cust-phone" type="tel" placeholder="১০ সংখ্যার মোবাইল নম্বর" class="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:border-emerald-700 outline-none" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-stone-700 mb-1">পিনকোড (PIN Code) *</label>
+              <input required id="q-cust-pin" type="text" placeholder="যেমন: 700057" class="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:border-emerald-700 outline-none" />
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-stone-700 mb-1">সম্পূর্ণ ঠিকানা ও ল্যান্ডমার্ক *</label>
+            <textarea required id="q-cust-address" rows="3" placeholder="বাড়ি নং, রাস্তা, এলাকা ও শহর" class="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:border-emerald-700 outline-none"></textarea>
+          </div>
+
+          <div class="bg-amber-50/70 p-3 rounded-lg flex justify-between items-center text-sm border border-amber-200/50">
+            <span class="text-stone-700 font-medium">সর্বমোট প্রদেয়:</span>
+            <span id="q-modal-amount" class="text-lg font-bold font-serif-bn text-emerald-900">₹৪৫০</span>
+          </div>
+
+          <button id="q-pay-btn" type="submit" class="w-full bg-emerald-800 hover:bg-emerald-900 text-white font-semibold py-3.5 rounded-xl transition shadow flex items-center justify-center gap-2">
+            <i data-lucide="lock" class="w-4 h-4"></i>
+            <span>নিরাপদ পেমেন্ট সম্পন্ন করুন (UPI / Cards)</span>
+          </button>
+        </form>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- পেমেন্ট সাকসেসফুল কনফার্মেশন মোডাল -->
+  <div id="payment-success-modal" class="fixed inset-0 z-50 overflow-y-auto hidden">
+    <div class="fixed inset-0 bg-stone-900/70 backdrop-blur-sm"></div>
+    <div class="flex min-h-full items-center justify-center p-4">
+      <div class="relative w-full max-w-md bg-white rounded-3xl shadow-2xl p-6 sm:p-8 text-center border border-emerald-100 z-10 animate-in fade-in zoom-in duration-200">
+        
+        <div class="w-16 h-16 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center mx-auto mb-4 shadow-inner">
+          <i data-lucide="check-circle" class="w-10 h-10"></i>
+        </div>
+
+        <span class="inline-block bg-emerald-100 text-emerald-900 text-xs font-bold px-3 py-1 rounded-full mb-2">
+          পেমেন্ট সফল হয়েছে
+        </span>
+
+        <h3 class="text-2xl font-bold font-serif-bn text-stone-900 mb-2">আপনার বুকিং নিশ্চিত!</h3>
+        <p class="text-xs sm:text-sm text-stone-600 leading-relaxed mb-6">
+          আপনার পেমেন্ট সফলভাবে গ্রহণ করা হয়েছে। আগামী ৩-৫ কার্যদিবসের মধ্যে আপনার দেওয়া ঠিকানায় বইটি পৌঁছে যাবে।
+        </p>
+
+        <div class="bg-amber-50/60 rounded-2xl p-4 text-xs text-stone-700 border border-amber-200/60 text-left space-y-2 mb-6">
+          <div class="flex justify-between">
+            <span class="text-stone-500">অর্ডার নম্বর:</span>
+            <span id="confirmed-order-id" class="font-mono font-bold text-stone-800">লোড হচ্ছে...</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-stone-500">বই ও সংস্করণ:</span>
+            <span id="confirmed-items" class="font-medium text-emerald-900">লোড হচ্ছে...</span>
+          </div>
+          <div class="flex justify-between border-t border-amber-200/50 pt-1.5">
+            <span class="text-stone-500">পরিশোধিত অঙ্ক:</span>
+            <span id="confirmed-amount" class="font-bold font-serif-bn text-stone-900 text-sm">₹০</span>
+          </div>
+        </div>
+
+        <div class="space-y-2">
+          <button onclick="closeSuccessModal()" class="w-full bg-emerald-800 hover:bg-emerald-900 text-white font-semibold py-3 rounded-xl transition shadow">
+            ঠিক আছে
+          </button>
+          <p class="text-[11px] text-stone-500">
+            যেকোনো প্রয়োজনে কল বা WhatsApp করুন: <strong>+91 7003255857</strong>
+          </p>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ফুটার -->
+  <footer class="bg-stone-900 text-stone-300 py-6 border-t border-stone-800 text-center text-xs space-y-1">
+    <p class="font-serif-bn text-sm text-amber-300">হিজিবিজি পাবলিশার্স • HIJIBIJI PUBLISHERS</p>
+    <p>© ২০২৬ সর্বস্বত্ব সংরক্ষিত। সমস্ত পণ্যের মূল্য ভারতীয় মুদ্রায় (INR)।</p>
+  </footer>
+
+  <script>
+    const SUPABASE_URL = 'https://ypvuxujhtvckryvzvdaw.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_2PqVctfevcK4ooUMMM0KYA_2NUcHszh';
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const cashfree = Cashfree({ mode: "production" });
+
+    let currentBook = {
+      id: null,
+      title: "ছাদ",
+      price: 450,
+      discount_price: null,
+      price_ebook: null,
+      discount_ebook: null,
+      price_paperback: 450,
+      discount_paperback: null,
+      price_hardcover: null,
+      discount_hardcover: null,
+      pdf_url: null
+    };
+
+    let selectedFormat = 'paperback';
+    let appliedSingleCoupon = null;
+
+    async function initBookData() {
+      try {
+        const { data } = await supabaseClient.from('books').select('*').ilike('title', '%ছাদ%').single();
+        if (data) {
+          currentBook = data;
+          document.getElementById('book-title').innerText = data.title;
+          document.getElementById('book-author').innerText = `লেখিকা: ${data.author}`;
+          if (data.isbn) document.getElementById('book-isbn').innerText = `ISBN: ${data.isbn}`;
+          if (data.description) document.getElementById('book-description').innerText = data.description;
+          if (data.cover_image_url) document.getElementById('book-cover').src = data.cover_image_url;
+        }
+      } catch (e) {
+        console.log("Supabase fetch:", e);
+      }
+      setupFormats();
+      updatePriceDisplay();
+      lucide.createIcons();
+    }
+
+    function setupFormats() {
+      const formats = [
+        {
+          key: 'ebook',
+          label: 'E-Book',
+          price: currentBook.price_ebook,
+          discount: currentBook.discount_ebook
+        },
+        {
+          key: 'paperback',
+          label: 'Paperback',
+          price: currentBook.price_paperback || currentBook.price,
+          discount: currentBook.discount_paperback || currentBook.discount_price
+        },
+        {
+          key: 'hardcover',
+          label: 'Hardcover',
+          price: currentBook.price_hardcover,
+          discount: currentBook.discount_hardcover
+        }
+      ];
+
+      const grid = document.getElementById('format-selector-grid');
+      grid.innerHTML = '';
+
+      let hasValidSelection = false;
+
+      formats.forEach(f => {
+        const isAvailable = f.price !== null && f.price !== undefined && Number(f.price) > 0;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.id = `format-btn-${f.key}`;
+
+        if (!isAvailable) {
+          btn.disabled = true;
+          btn.className = "p-3 rounded-xl border border-stone-200 bg-stone-100 text-stone-400 opacity-60 cursor-not-allowed text-center";
+          btn.innerHTML = `
+            <div class="text-xs font-bold text-stone-500">${f.label}</div>
+            <div class="text-sm font-bold mt-0.5 text-stone-400">NA</div>
+          `;
+        } else {
+          if (!hasValidSelection) {
+            selectedFormat = f.key;
+            hasValidSelection = true;
+          }
+          const activeClass = (selectedFormat === f.key) 
+            ? "border-2 border-emerald-800 bg-emerald-50 text-emerald-950 shadow-sm" 
+            : "border border-stone-300 bg-white text-stone-700 hover:border-emerald-600";
+          
+          btn.className = `p-3 rounded-xl text-center transition ${activeClass}`;
+          const currentPrice = (f.discount && f.discount < f.price) ? f.discount : f.price;
+          btn.innerHTML = `
+            <div class="text-xs font-bold">${f.label}</div>
+            <div class="text-sm font-bold text-emerald-900 mt-0.5 font-serif-bn">₹${currentPrice}</div>
+          `;
+          btn.onclick = () => selectFormat(f.key);
+        }
+        grid.appendChild(btn);
+      });
+    }
+
+    function selectFormat(fmtKey) {
+      selectedFormat = fmtKey;
+      ['ebook', 'paperback', 'hardcover'].forEach(k => {
+        const el = document.getElementById(`format-btn-${k}`);
+        if (!el || el.disabled) return;
+        if (k === fmtKey) {
+          el.className = "p-3 rounded-xl text-center transition border-2 border-emerald-800 bg-emerald-50 text-emerald-950 shadow-sm";
+        } else {
+          el.className = "p-3 rounded-xl text-center transition border border-stone-300 bg-white text-stone-700 hover:border-emerald-600";
+        }
+      });
+      updatePriceDisplay();
+    }
+
+    function getSelectedPrices() {
+      let mrp = 0;
+      let discount = null;
+
+      if (selectedFormat === 'ebook') {
+        mrp = currentBook.price_ebook || 0;
+        discount = currentBook.discount_ebook;
+      } else if (selectedFormat === 'hardcover') {
+        mrp = currentBook.price_hardcover || 0;
+        discount = currentBook.discount_hardcover;
+      } else {
+        mrp = currentBook.price_paperback || currentBook.price || 0;
+        discount = currentBook.discount_paperback || currentBook.discount_price;
+      }
+
+      const activePrice = (discount && discount < mrp) ? Number(discount) : Number(mrp);
+      return { mrp, activePrice, hasDiscount: (discount && discount < mrp) };
+    }
+
+    function calculateFinalPrice() {
+      const { activePrice } = getSelectedPrices();
+      let discount = 0;
+      if (appliedSingleCoupon) {
+        discount = appliedSingleCoupon.discount_type === 'percentage' 
+                   ? (activePrice * appliedSingleCoupon.discount_value) / 100 
+                   : appliedSingleCoupon.discount_value;
+      }
+      return Math.max(0, Math.round(activePrice - discount));
+    }
+
+    function updatePriceDisplay() {
+      const { mrp, activePrice, hasDiscount } = getSelectedPrices();
+      const finalPay = calculateFinalPrice();
+
+      document.getElementById('book-price-display').innerText = `₹${activePrice}`;
+      if (hasDiscount) {
+        document.getElementById('book-mrp-display').innerText = `₹${mrp}`;
+        document.getElementById('book-mrp-display').classList.remove('hidden');
+        document.getElementById('discount-badge').classList.remove('hidden');
+      } else {
+        document.getElementById('book-mrp-display').classList.add('hidden');
+        document.getElementById('discount-badge').classList.add('hidden');
+      }
+
+      document.getElementById('single-payable-total').innerText = `₹${finalPay}`;
+      document.getElementById('q-modal-amount').innerText = `₹${finalPay}`;
+
+      const fmtBengali = selectedFormat === 'ebook' ? 'E-Book' : (selectedFormat === 'hardcover' ? 'Hardcover' : 'Paperback');
+      document.getElementById('modal-subtitle').innerText = `বই: ${currentBook.title} (${fmtBengali})`;
+    }
+
+    function openPreviewPDF() {
+      if (currentBook.pdf_url) {
+        window.open(currentBook.pdf_url, '_blank');
+      } else {
+        alert('বইটির স্যাম্পল PDF ফাইলটি শীঘ্রই আপলোড করা হবে!');
+      }
+    }
+
+    async function applySingleCoupon() {
+      const code = document.getElementById('single-coupon-input').value.trim().toUpperCase();
+      const msg = document.getElementById('single-coupon-msg');
+      msg.classList.remove('hidden');
+
+      if (!code) return;
+
+      const { data, error } = await supabaseClient.from('coupons').select('*').eq('code', code).eq('is_active', true).single();
+      if (error || !data) {
+        msg.innerText = 'অবৈধ বা মেয়াদোত্তীর্ণ কুপন';
+        msg.className = 'text-xs text-red-600';
+        return;
+      }
+
+      appliedSingleCoupon = data;
+      msg.innerText = `${data.discount_value}% কুপন ছাড় প্রযোজ্য হয়েছে!`;
+      msg.className = 'text-xs text-emerald-800 font-semibold';
+      updatePriceDisplay();
+    }
+
+    function toggleQuickCheckout(open) {
+      document.getElementById('quick-checkout-modal').classList.toggle('hidden', !open);
+    }
+
+    function openQuickCheckoutModal() {
+      updatePriceDisplay();
+      toggleQuickCheckout(true);
+    }
+
+    async function handleSingleBookOrder(e) {
+      e.preventDefault();
+      const btn = document.getElementById('q-pay-btn');
+      btn.disabled = true;
+      btn.innerHTML = `<span>পেমেন্ট গেটওয়ে লোড হচ্ছে...</span>`;
+
+      const name = document.getElementById('q-cust-name').value;
+      const phone = document.getElementById('q-cust-phone').value;
+      const pin = document.getElementById('q-cust-pin').value;
+      const address = document.getElementById('q-cust-address').value;
+      const fullAddress = `${address}, পিন: ${pin}`;
+      const totalAmount = calculateFinalPrice();
+
+      const fmtBengali = selectedFormat === 'ebook' ? 'E-Book' : (selectedFormat === 'hardcover' ? 'Hardcover' : 'Paperback');
+      const orderItemString = `${currentBook.title} (${fmtBengali}) (x1)`;
+
+      try {
+        const { data: orderData, error: orderErr } = await supabaseClient.from('orders').insert({
+          customer_name: name,
+          customer_phone: phone,
+          shipping_address: fullAddress,
+          total_amount: totalAmount,
+          order_items: orderItemString,
+          payment_status: 'PENDING'
+        }).select().single();
+
+        if (orderErr) throw orderErr;
+
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/create-cashfree-order`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_ANON_KEY
+          },
+          body: JSON.stringify({
+            order_id: orderData.id,
+            order_amount: totalAmount,
+            customer_name: name,
+            customer_phone: phone
+          })
+        });
+
+        const resData = await response.json();
+
+        if (resData && resData.payment_session_id) {
+          cashfree.checkout({
+            paymentSessionId: resData.payment_session_id,
+            redirectTarget: "_self"
+          });
+        } else {
+          alert('পেমেন্ট সেশন তৈরি করতে সমস্যা হয়েছে।');
+          btn.disabled = false;
+          btn.innerHTML = `<span>নিরাপদ পেমেন্ট সম্পন্ন করুন</span>`;
+        }
+      } catch (err) {
+        console.error(err);
+        alert('অর্ডার প্রক্রিয়া করতে ত্রুটি দেখা দিয়েছে।');
+        btn.disabled = false;
+        btn.innerHTML = `<span>নিরাপদ পেমেন্ট সম্পন্ন করুন</span>`;
+      }
+    }
+
+    async function checkPaymentReturnStatus() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const orderId = urlParams.get('order_id');
+
+      if (!orderId) return;
+
+      try {
+        const { data: order, error } = await supabaseClient
+          .from('orders')
+          .select('*')
+          .eq('id', orderId)
+          .single();
+
+        if (error || !order) return;
+
+        document.getElementById('confirmed-order-id').innerText = order.id.slice(0, 8).toUpperCase();
+        document.getElementById('confirmed-items').innerText = order.order_items || 'ছাদ';
+        document.getElementById('confirmed-amount').innerText = `₹${order.total_amount}`;
+        
+        document.getElementById('payment-success-modal').classList.remove('hidden');
+        lucide.createIcons();
+
+        if (order.payment_status !== 'DELIVERED') {
+          await supabaseClient.from('orders').update({ payment_status: 'SUCCESS' }).eq('id', orderId);
+        }
+
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } catch (err) {
+        console.error("Payment return error:", err);
+      }
+    }
+
+    function closeSuccessModal() {
+      document.getElementById('payment-success-modal').classList.add('hidden');
+    }
+
+    initBookData();
+    checkPaymentReturnStatus();
+    lucide.createIcons();
+  </script>
+</body>
+</html>

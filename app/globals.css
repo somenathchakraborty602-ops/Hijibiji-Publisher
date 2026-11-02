@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+:root {
+  --font-sans: var(--font-hind-siliguri), 'Hind Siliguri', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-serif-bn: var(--font-noto-serif-bengali), 'Noto Serif Bengali', serif;
+}
+
+body {
+  font-family: var(--font-sans);
+}
+
+.font-serif-bn {
+  font-family: var(--font-serif-bn);
+}
+
+/* Custom smooth scrollbar */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+::-webkit-scrollbar-track {
+  background: #fbf8f3;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}

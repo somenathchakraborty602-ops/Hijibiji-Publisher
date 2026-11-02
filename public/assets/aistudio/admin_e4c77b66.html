@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>হিজিবিজি পাবলিশার্স | অ্যাডমিন কন্ট্রোল প্যানেল</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Noto+Serif+Bengali:wght@600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    body { font-family: 'Hind Siliguri', sans-serif; }
+    .font-serif-bn { font-family: 'Noto Serif Bengali', serif; }
+  </style>
+</head>
+<body class="bg-stone-100 text-stone-900 min-h-screen">
+
+  <!-- লগইন গেটওয়ে -->
+  <div id="login-screen" class="fixed inset-0 z-50 bg-stone-900/90 backdrop-blur flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl p-6 sm:p-8 max-w-sm w-full shadow-2xl text-center border border-amber-100">
+      <div class="w-16 h-16 bg-emerald-100 text-emerald-800 rounded-2xl flex items-center justify-center mx-auto mb-4">
+        <i data-lucide="shield-alert" class="w-8 h-8"></i>
+      </div>
+      <h2 class="text-xl font-bold font-serif-bn text-stone-900">অ্যাডমিন প্রবেশ</h2>
+      <p class="text-xs text-stone-500 mt-1 mb-6">হিজিবিজি পাবলিশার্স ব্যাকঅফিস</p>
+      
+      <form onsubmit="handleAdminLogin(event)" class="space-y-4">
+        <div>
+          <input required id="admin-pass" type="password" placeholder="গোপন পাসওয়ার্ড দিন" class="w-full text-center border border-stone-300 rounded-xl px-4 py-3 text-sm focus:border-emerald-700 outline-none" />
+        </div>
+        <button type="submit" class="w-full bg-emerald-800 hover:bg-emerald-900 text-white font-semibold py-3 rounded-xl transition shadow">
+          প্রবেশ করুন
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- মূল অ্যাডমিন ড্যাশবোর্ড -->
+  <div id="admin-dashboard" class="hidden min-h-screen flex flex-col">
+    
+    <!-- টপবার -->
+    <header class="bg-white border-b border-stone-200 sticky top-0 z-30 shadow-sm">
+      <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-lg bg-emerald-800 text-white flex items-center justify-center font-bold font-serif-bn text-lg">
+            হি
+          </div>
+          <div>
+            <h1 class="text-lg font-bold font-serif-bn text-emerald-950">হিজিবিজি পাবলিশার্স</h1>
+            <p class="text-xs text-stone-500">কন্ট্রোল ড্যাশবোর্ড</p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <a href="index.html" target="_blank" class="text-xs bg-stone-100 hover:bg-stone-200 text-stone-700 px-3 py-2 rounded-lg font-medium flex items-center gap-1 transition">
+            <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+            <span>ওয়েবসাইট দেখুন</span>
+          </a>
+          <button onclick="location.reload()" class="text-xs text-red-600 hover:bg-red-50 px-3 py-2 rounded-lg font-medium transition">
+            লগআউট
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- কনটেন্ট এরিয়া -->
+    <main class="max-w-7xl mx-auto px-4 py-8 flex-1 w-full space-y-8">
+      
+      <!-- ট্যাব নেভিগেশন -->
+      <div class="flex gap-2 border-b border-stone-200 pb-2">
+        <button onclick="switchTab('orders')" id="tab-btn-orders" class="px-4 py-2 font-semibold text-sm rounded-lg bg-emerald-800 text-white transition flex items-center gap-2">
+          <i data-lucide="package-check" class="w-4 h-4"></i>
+          <span>গ্রাহকদের অর্ডারসমূহ</span>
+        </button>
+        <button onclick="switchTab('books')" id="tab-btn-books" class="px-4 py-2 font-semibold text-sm rounded-lg bg-white text-stone-600 hover:bg-stone-100 transition flex items-center gap-2">
+          <i data-lucide="book-open" class="w-4 h-4"></i>
+          <span>বই ক্যাটালগ ও এডিট</span>
+        </button>
+        <button onclick="switchTab('coupons')" id="tab-btn-coupons" class="px-4 py-2 font-semibold text-sm rounded-lg bg-white text-stone-600 hover:bg-stone-100 transition flex items-center gap-2">
+          <i data-lucide="ticket-percent" class="w-4 h-4"></i>
+          <span>কুপন কোড</span>
+        </button>
+      </div>
+
+      <!-- ১. অর্ডার সেকশন -->
+      <section id="section-orders" class="space-y-4">
+        <div class="flex justify-between items-center">
+          <div>
+            <h3 class="text-lg font-bold font-serif-bn text-stone-900">সাম্প্রতিক অর্ডার ও কুরিয়ার তথ্য</h3>
+            <p class="text-xs text-stone-500">কোন বই ও ফরম্যাট অর্ডার হয়েছে, ঠিকানা ও পেমেন্ট হিস্ট্রি</p>
+          </div>
+          <button onclick="loadOrders()" class="text-xs bg-white border border-stone-300 hover:bg-stone-50 px-3 py-2 rounded-lg font-medium flex items-center gap-1">
+            <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i> রিফ্রেশ
+          </button>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse text-xs">
+              <thead class="bg-stone-50 text-stone-600 border-b border-stone-200 uppercase font-semibold">
+                <tr>
+                  <th class="p-3">তারিখ</th>
+                  <th class="p-3">অর্ডারকৃত বই ও ফরম্যাট</th>
+                  <th class="p-3">গ্রাহকের নাম ও ফোন</th>
+                  <th class="p-3">ডেলিভারি ঠিকানা ও পিন</th>
+                  <th class="p-3">অ্যামাউন্ট</th>
+                  <th class="p-3">স্ট্যাটাস / অ্যাকশন</th>
+                </tr>
+              </thead>
+              <tbody id="orders-table-body" class="divide-y divide-stone-100 text-stone-700">
+                <tr>
+                  <td colspan="6" class="p-6 text-center text-stone-400">অর্ডার লোড হচ্ছে...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ২. বই ক্যাটালগ সেকশন -->
+      <section id="section-books" class="space-y-6 hidden">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          
+          <div class="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm h-fit space-y-4">
+            <div class="flex justify-between items-center border-b pb-2">
+              <h4 id="form-heading" class="font-bold font-serif-bn text-base text-stone-900 flex items-center gap-2">
+                <i data-lucide="plus-circle" class="w-4 h-4 text-emerald-800"></i> নতুন বই যোগ করুন
+              </h4>
+              <button id="cancel-edit-btn" onclick="resetBookForm()" class="text-xs text-stone-500 hover:text-stone-800 underline hidden">বাতিল</button>
+            </div>
+
+            <form onsubmit="handleSaveBook(event)" class="space-y-3 text-xs">
+              <input type="hidden" id="edit-book-id" value="" />
+              <input type="hidden" id="existing-cover-url" value="" />
+              <input type="hidden" id="existing-pdf-url" value="" />
+
+              <div>
+                <label class="block font-semibold mb-1 text-stone-700">বইয়ের নাম *</label>
+                <input required id="book-title" type="text" placeholder="যেমন: চাঁদের পাহাড়" class="w-full border border-stone-300 rounded-lg p-2.5 outline-none focus:border-emerald-700" />
+              </div>
+
+              <div>
+                <label class="block font-semibold mb-1 text-stone-700">লেখকের নাম *</label>
+                <input required id="book-author" type="text" placeholder="যেমন: বিভূতিভূষণ বন্দ্যোপাধ্যায়" class="w-full border border-stone-300 rounded-lg p-2.5 outline-none focus:border-emerald-700" />
+              </div>
+
+              <div>
+                <label class="block font-semibold mb-1 text-stone-700">ISBN নম্বর</label>
+                <input id="book-isbn" type="text" placeholder="যেমন: 978-81-912345-6-7" class="w-full border border-stone-300 rounded-lg p-2.5 outline-none focus:border-emerald-700" />
+              </div>
+
+              <!-- ফরম্যাট ভিত্তিক মূল্য (EBook / Paperback / Hardcover) -->
+              <div class="p-3 bg-stone-50 rounded-xl border border-stone-200 space-y-2.5">
+                <p class="font-bold text-stone-800 flex items-center gap-1.5">
+                  <i data-lucide="layers" class="w-3.5 h-3.5 text-emerald-800"></i>
+                  ফরম্যাট ভিত্তিক মূল্য (না থাকলে ফাঁকা রাখুন = NA)
+                </p>
+
+                <!-- ১. ই-বুক -->
+                <div class="grid grid-cols-2 gap-2">
+                  <div>
+                    <label class="block font-medium text-[11px] text-stone-600">E-Book MRP (₹)</label>
+                    <input id="book-price-ebook" type="number" placeholder="NA (ফাঁকা)" class="w-full border border-stone-300 rounded-lg p-2 outline-none focus:border-emerald-700 bg-white" />
+                  </div>
+                  <div>
+                    <label class="block font-medium text-[11px] text-stone-600">E-Book অফার (₹)</label>
+                    <input id="book-discount-ebook" type="number" placeholder="ছাড়ের দাম" class="w-full border border-stone-300 rounded-lg p-2 outline-none focus:border-emerald-700 bg-white" />
+                  </div>
+                </div>
+
+                <!-- ২. পেপারব্যাক -->
+                <div class="grid grid-cols-2 gap-2">
+                  <div>
+                    <label class="block font-medium text-[11px] text-stone-600">Paperback MRP (₹)</label>
+                    <input id="book-price-paperback" type="number" placeholder="যেমন: ৩৫০" class="w-full border border-stone-300 rounded-lg p-2 outline-none focus:border-emerald-700 bg-white" />
+                  </div>
+                  <div>
+                    <label class="block font-medium text-[11px] text-stone-600">Paperback অফার (₹)</label>
+                    <input id="book-discount-paperback" type="number" placeholder="যেমন: ২১০" class="w-full border border-stone-300 rounded-lg p-2 outline-none focus:border-emerald-700 bg-white" />
+                  </div>
+                </div>
+
+                <!-- ৩. হার্ডকভার -->
+                <div class="grid grid-cols-2 gap-2">
+                  <div>
+                    <label class="block font-medium text-[11px] text-stone-600">Hardcover MRP (₹)</label>
+                    <input id="book-price-hardcover" type="number" placeholder="NA (ফাঁকা)" class="w-full border border-stone-300 rounded-lg p-2 outline-none focus:border-emerald-700 bg-white" />
+                  </div>
+                  <div>
+                    <label class="block font-medium text-[11px] text-stone-600">Hardcover অফার (₹)</label>
+                    <input id="book-discount-hardcover" type="number" placeholder="ছাড়ের দাম" class="w-full border border-stone-300 rounded-lg p-2 outline-none focus:border-emerald-700 bg-white" />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label class="block font-semibold mb-1 text-stone-700">কভার ছবি আপলোড করুন</label>
+                <input id="book-cover-file" type="file" accept="image/*" class="w-full border border-stone-300 rounded-lg p-2 text-stone-600 bg-stone-50" />
+                <p id="cover-file-hint" class="text-[10px] text-stone-400 mt-1">সরাসরি ডিভাইস থেকে ছবি বাছুন। এডিটের সময় ফাঁকা রাখলে আগের ছবিটিই বহাল থাকবে।</p>
+              </div>
+
+              <!-- স্যাম্পল পিডিএফ আপলোড সেকশন -->
+              <div>
+                <label class="block font-semibold mb-1 text-stone-700">স্যাম্পল/প্রিভিউ PDF আপলোড করুন</label>
+                <input id="book-pdf-file" type="file" accept="application/pdf" class="w-full border border-stone-300 rounded-lg p-2 text-stone-600 bg-stone-50" />
+                <p id="pdf-file-hint" class="text-[10px] text-stone-400 mt-1">পাঠকদের পড়ার জন্য বইটির স্যাম্পল PDF ফাইল নির্বাচন করুন।</p>
+              </div>
+
+              <div>
+                <label class="block font-semibold mb-1 text-stone-700">বইয়ের বর্ণনা / ব্লার্ব</label>
+                <textarea id="book-desc" rows="3" placeholder="বইয়ের বিষয়বস্তু সম্পর্কে দু-চার লাইন..." class="w-full border border-stone-300 rounded-lg p-2.5 outline-none focus:border-emerald-700"></textarea>
+              </div>
+
+              <button id="save-book-btn" type="submit" class="w-full bg-emerald-800 hover:bg-emerald-900 text-white font-semibold py-2.5 rounded-xl transition shadow flex items-center justify-center gap-1.5">
+                <i data-lucide="check" class="w-4 h-4"></i>
+                <span id="save-btn-text">বইটি প্রকাশ করুন</span>
+              </button>
+            </form>
+          </div>
+
+          <div class="lg:col-span-2 space-y-3">
+            <h4 class="font-bold font-serif-bn text-base text-stone-900">বর্তমান লাইভ বইসমূহ</h4>
+            <div id="books-admin-list" class="space-y-3">
+              <p class="text-xs text-stone-400">বই লোড হচ্ছে...</p>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ৩. কুপন সেকশন -->
+      <section id="section-coupons" class="space-y-6 hidden">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div class="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm h-fit space-y-4">
+            <h4 class="font-bold font-serif-bn text-base text-stone-900 border-b pb-2 flex items-center gap-2">
+              <i data-lucide="tag" class="w-4 h-4 text-emerald-800"></i> নতুন কুপন তৈরি করুন
+            </h4>
+
+            <form onsubmit="handleAddCoupon(event)" class="space-y-3 text-xs">
+              <div>
+                <label class="block font-semibold mb-1 text-stone-700">কুপন কোড *</label>
+                <input required id="coupon-code" type="text" placeholder="যেমন: HIJIBIJIPRE" class="w-full uppercase border border-stone-300 rounded-lg p-2.5 outline-none focus:border-emerald-700" />
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="block font-semibold mb-1 text-stone-700">ছাড়ের শতাংশ (%) *</label>
+                  <input required id="coupon-pct" type="number" placeholder="40" class="w-full border border-stone-300 rounded-lg p-2.5 outline-none focus:border-emerald-700" />
+                </div>
+                <div>
+                  <label class="block font-semibold mb-1 text-stone-700">ন্যূনতম অর্ডার (₹)</label>
+                  <input id="coupon-min" type="number" value="0" class="w-full border border-stone-300 rounded-lg p-2.5 outline-none focus:border-emerald-700" />
+                </div>
+              </div>
+
+              <button type="submit" class="w-full bg-emerald-800 hover:bg-emerald-900 text-white font-semibold py-2.5 rounded-xl transition">
+                কুপন চালু করুন
+              </button>
+            </form>
+          </div>
+
+          <div class="lg:col-span-2 space-y-3">
+            <h4 class="font-bold font-serif-bn text-base text-stone-900">সক্রিয় কুপন কোড</h4>
+            <div id="coupons-admin-list" class="space-y-3">
+              <p class="text-xs text-stone-400">কুপন তালিকা লোড হচ্ছে...</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script>
+    const SUPABASE_URL = 'https://ypvuxujhtvckryvzvdaw.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_2PqVctfevcK4ooUMMM0KYA_2NUcHszh';
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const ADMIN_PIN = 'some@1051';
+    let loadedBooks = [];
+
+    function handleAdminLogin(e) {
+      e.preventDefault();
+      const pass = document.getElementById('admin-pass').value.trim();
+      if (pass === ADMIN_PIN) {
+        document.getElementById('login-screen').classList.add('hidden');
+        document.getElementById('admin-dashboard').classList.remove('hidden');
+        loadOrders();
+        loadBooks();
+        loadCoupons();
+      } else {
+        alert('ভুল পাসওয়ার্ড! সঠিক পাসওয়ার্ড দিন।');
+      }
+    }
+
+    function switchTab(tab) {
+      ['orders', 'books', 'coupons'].forEach(t => {
+        document.getElementById(`section-${t}`).classList.add('hidden');
+        const btn = document.getElementById(`tab-btn-${t}`);
+        btn.className = "px-4 py-2 font-semibold text-sm rounded-lg bg-white text-stone-600 hover:bg-stone-100 transition flex items-center gap-2";
+      });
+
+      document.getElementById(`section-${tab}`).classList.remove('hidden');
+      const activeBtn = document.getElementById(`tab-btn-${tab}`);
+      activeBtn.className = "px-4 py-2 font-semibold text-sm rounded-lg bg-emerald-800 text-white transition flex items-center gap-2";
+    }
+
+    // --- ১. অর্ডার লোড ---
+    async function loadOrders() {
+      const tbody = document.getElementById('orders-table-body');
+      tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-stone-400">অর্ডার রিফ্রেশ হচ্ছে...</td></tr>`;
+
+      const { data, error } = await supabaseClient
+        .from('orders')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error || !data || data.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-stone-400">এখনও কোনো অর্ডার আসেনি।</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = '';
+      data.forEach(order => {
+        const date = new Date(order.created_at).toLocaleDateString('bn-BD', { day: 'numeric', month: 'short', year: 'numeric' });
+        const currentStatus = (order.payment_status || 'PENDING').toUpperCase();
+        
+        let bookName = order.order_items;
+        if (!bookName || bookName.trim() === '') {
+          bookName = order.total_amount >= 200 ? 'শিমলায় সংকট (Paperback)' : 'হিজিবিজি বই সম্ভার';
+        }
+
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-stone-50 transition";
+        tr.innerHTML = `
+          <td class="p-3 text-stone-500 whitespace-nowrap">${date}</td>
+          <td class="p-3">
+            <span class="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-950 font-bold px-3 py-1.5 rounded-lg text-xs border border-emerald-200 shadow-sm">
+              <i data-lucide="book-marked" class="w-3.5 h-3.5 text-emerald-800"></i>
+              ${bookName}
+            </span>
+          </td>
+          <td class="p-3 font-medium text-stone-900">
+            <div>${order.customer_name}</div>
+            <a href="tel:${order.customer_phone}" class="text-emerald-700 underline text-xs font-semibold">${order.customer_phone}</a>
+          </td>
+          <td class="p-3 max-w-xs text-stone-600 leading-snug">${order.shipping_address}</td>
+          <td class="p-3 font-bold font-serif-bn text-stone-900 whitespace-nowrap">₹${order.total_amount}</td>
+          <td class="p-3 whitespace-nowrap">
+            <select onchange="handleOrderStatusChange('${order.id}', this.value)" class="text-xs font-semibold rounded-lg px-2.5 py-1.5 border outline-none cursor-pointer transition shadow-sm ${
+              currentStatus === 'DELIVERED' || currentStatus === 'SUCCESS'
+                ? 'bg-emerald-50 text-emerald-800 border-emerald-300' 
+                : 'bg-amber-50 text-amber-800 border-amber-300'
+            }">
+              <option value="PENDING" ${currentStatus === 'PENDING' ? 'selected' : ''}>⏳ Pending (পেন্ডিং)</option>
+              <option value="DELIVERED" ${currentStatus === 'DELIVERED' || currentStatus === 'SUCCESS' ? 'selected' : ''}>✓ Delivered (ডেলিভারড)</option>
+              <option value="DELETE" class="text-red-600 font-bold">🗑 Delete (মুছে ফেলুন)</option>
+            </select>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+      lucide.createIcons();
+    }
+
+    async function handleOrderStatusChange(orderId, actionValue) {
+      if (actionValue === 'DELETE') {
+        const confirmed = confirm('আপনি কি নিশ্চিত এই অর্ডারটি স্থায়ীভাবে মুছে ফেলতে চান?');
+        if (!confirmed) {
+          loadOrders();
+          return;
+        }
+
+        const { error } = await supabaseClient.from('orders').delete().eq('id', orderId);
+        if (error) {
+          alert('অর্ডার ডিলিট করতে সমস্যা হয়েছে: ' + error.message);
+        } else {
+          loadOrders();
+        }
+      } else {
+        const { error } = await supabaseClient
+          .from('orders')
+          .update({ payment_status: actionValue })
+          .eq('id', orderId);
+
+        if (error) {
+          alert('স্ট্যাটাস আপডেট করতে সমস্যা হয়েছে: ' + error.message);
+          loadOrders();
+        } else {
+          loadOrders();
+        }
+      }
+    }
+
+    // --- ২. বই লোড ও এডিট ---
+    async function loadBooks() {
+      const list = document.getElementById('books-admin-list');
+      const { data } = await supabaseClient.from('books').select('*').order('created_at', { ascending: false });
+      loadedBooks = data || [];
+      
+      if (loadedBooks.length === 0) {
+        list.innerHTML = `<p class="text-xs text-stone-400">ক্যাটালগে কোনো বই নেই।</p>`;
+        return;
+      }
+
+      list.innerHTML = '';
+      loadedBooks.forEach(b => {
+        const ebookStr = (b.price_ebook && Number(b.price_ebook) > 0) ? `E-Book: ₹${b.discount_ebook || b.price_ebook}` : 'E-Book: NA';
+        const paperPrice = b.price_paperback || b.price;
+        const paperStr = (paperPrice && Number(paperPrice) > 0) ? `Paperback: ₹${b.discount_paperback || b.discount_price || paperPrice}` : 'Paperback: NA';
+        const hardStr = (b.price_hardcover && Number(b.price_hardcover) > 0) ? `Hardcover: ₹${b.discount_hardcover || b.price_hardcover}` : 'Hardcover: NA';
+
+        const item = document.createElement('div');
+        item.className = "bg-white p-4 rounded-xl border border-stone-200 shadow-sm flex items-center justify-between gap-4";
+        item.innerHTML = `
+          <div class="flex items-center gap-3">
+            <img src="${b.cover_image_url || 'https://via.placeholder.com/80'}" class="w-12 h-16 object-cover rounded bg-stone-100" onerror="this.src='https://via.placeholder.com/80'">
+            <div>
+              <h5 class="font-bold font-serif-bn text-sm text-stone-900">${b.title}</h5>
+              <p class="text-xs text-stone-500">${b.author}</p>
+              <div class="flex flex-wrap gap-1.5 mt-1 text-[10px]">
+                <span class="bg-blue-50 text-blue-800 px-1.5 py-0.5 rounded font-medium border border-blue-100">${ebookStr}</span>
+                <span class="bg-emerald-50 text-emerald-800 px-1.5 py-0.5 rounded font-medium border border-emerald-100">${paperStr}</span>
+                <span class="bg-purple-50 text-purple-800 px-1.5 py-0.5 rounded font-medium border border-purple-100">${hardStr}</span>
+              </div>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <button onclick="startEditBook('${b.id}')" class="text-xs bg-stone-100 hover:bg-emerald-50 hover:text-emerald-800 text-stone-700 px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1">
+              <i data-lucide="edit" class="w-3.5 h-3.5"></i> এডিট
+            </button>
+            <button onclick="handleDeleteBook('${b.id}')" class="text-xs text-red-600 hover:bg-red-50 px-2 py-1.5 rounded-lg font-medium transition">
+              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+            </button>
+          </div>
+        `;
+        list.appendChild(item);
+      });
+      lucide.createIcons();
+    }
+
+    function startEditBook(id) {
+      const book = loadedBooks.find(b => b.id === id);
+      if (!book) return;
+
+      document.getElementById('edit-book-id').value = book.id;
+      document.getElementById('existing-cover-url').value = book.cover_image_url || '';
+      document.getElementById('existing-pdf-url').value = book.pdf_url || '';
+      document.getElementById('book-title').value = book.title;
+      document.getElementById('book-author').value = book.author;
+      document.getElementById('book-isbn').value = book.isbn || '';
+
+      document.getElementById('book-price-ebook').value = book.price_ebook || '';
+      document.getElementById('book-discount-ebook').value = book.discount_ebook || '';
+      document.getElementById('book-price-paperback').value = book.price_paperback || book.price || '';
+      document.getElementById('book-discount-paperback').value = book.discount_paperback || book.discount_price || '';
+      document.getElementById('book-price-hardcover').value = book.price_hardcover || '';
+      document.getElementById('book-discount-hardcover').value = book.discount_hardcover || '';
+
+      document.getElementById('book-desc').value = book.description || '';
+      document.getElementById('book-cover-file').value = '';
+      document.getElementById('book-pdf-file').value = '';
+
+      document.getElementById('form-heading').innerHTML = `<i data-lucide="edit" class="w-4 h-4 text-emerald-800"></i> বইটি এডিট করুন`;
+      document.getElementById('save-btn-text').innerText = 'আপডেট সংরক্ষণ করুন';
+      document.getElementById('cancel-edit-btn').classList.remove('hidden');
+      document.getElementById('cover-file-hint').innerText = 'নতুন ছবি দিলে আপলোড হবে, না দিলে পূর্বের ছবিটিই থাকবে।';
+      document.getElementById('pdf-file-hint').innerText = book.pdf_url ? 'ইতিমধ্যে PDF যুক্ত আছে। পরিবর্তন করতে চাইলে নতুন ফাইল নির্বাচন করুন।' : 'বইটির স্যাম্পল PDF ফাইল নির্বাচন করুন।';
+
+      lucide.createIcons();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function resetBookForm() {
+      document.getElementById('edit-book-id').value = '';
+      document.getElementById('existing-cover-url').value = '';
+      document.getElementById('existing-pdf-url').value = '';
+      document.getElementById('book-title').value = '';
+      document.getElementById('book-author').value = '';
+      document.getElementById('book-isbn').value = '';
+
+      document.getElementById('book-price-ebook').value = '';
+      document.getElementById('book-discount-ebook').value = '';
+      document.getElementById('book-price-paperback').value = '';
+      document.getElementById('book-discount-paperback').value = '';
+      document.getElementById('book-price-hardcover').value = '';
+      document.getElementById('book-discount-hardcover').value = '';
+
+      document.getElementById('book-cover-file').value = '';
+      document.getElementById('book-pdf-file').value = '';
+      document.getElementById('book-desc').value = '';
+
+      document.getElementById('form-heading').innerHTML = `<i data-lucide="plus-circle" class="w-4 h-4 text-emerald-800"></i> নতুন বই যোগ করুন`;
+      document.getElementById('save-btn-text').innerText = 'বইটি প্রকাশ করুন';
+      document.getElementById('cancel-edit-btn').classList.add('hidden');
+      document.getElementById('cover-file-hint').innerText = 'সরাসরি ডিভাইস থেকে ছবি বাছুন।';
+      document.getElementById('pdf-file-hint').innerText = 'বইটির স্যাম্পল PDF ফাইল নির্বাচন করুন।';
+      lucide.createIcons();
+    }
+
+    async function handleSaveBook(e) {
+      e.preventDefault();
+      const saveBtn = document.getElementById('save-book-btn');
+      const saveText = document.getElementById('save-btn-text');
+      saveBtn.disabled = true;
+      saveText.innerText = 'সংরক্ষণ হচ্ছে...';
+
+      const editId = document.getElementById('edit-book-id').value;
+      const title = document.getElementById('book-title').value;
+      const author = document.getElementById('book-author').value;
+      const isbn = document.getElementById('book-isbn').value.trim() || null;
+      
+      const price_ebook = document.getElementById('book-price-ebook').value ? Number(document.getElementById('book-price-ebook').value) : null;
+      const discount_ebook = document.getElementById('book-discount-ebook').value ? Number(document.getElementById('book-discount-ebook').value) : null;
+      
+      const price_paperback = document.getElementById('book-price-paperback').value ? Number(document.getElementById('book-price-paperback').value) : null;
+      const discount_paperback = document.getElementById('book-discount-paperback').value ? Number(document.getElementById('book-discount-paperback').value) : null;
+      
+      const price_hardcover = document.getElementById('book-price-hardcover').value ? Number(document.getElementById('book-price-hardcover').value) : null;
+      const discount_hardcover = document.getElementById('book-discount-hardcover').value ? Number(document.getElementById('book-discount-hardcover').value) : null;
+
+      const basePrice = price_paperback || price_ebook || price_hardcover || 0;
+      const baseDiscount = discount_paperback || discount_ebook || discount_hardcover || null;
+
+      const desc = document.getElementById('book-desc').value;
+      const fileInput = document.getElementById('book-cover-file');
+      const pdfInput = document.getElementById('book-pdf-file');
+
+      let coverUrl = document.getElementById('existing-cover-url').value;
+      let pdfUrl = document.getElementById('existing-pdf-url').value;
+
+      if (fileInput.files.length > 0) {
+        saveText.innerText = 'কভার ছবি আপলোড হচ্ছে...';
+        const file = fileInput.files[0];
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+        
+        const { error: uploadErr } = await supabaseClient.storage.from('book-covers').upload(fileName, file);
+        if (uploadErr) {
+          alert('কভার ছবি আপলোড করতে সমস্যা হয়েছে: ' + uploadErr.message);
+          saveBtn.disabled = false;
+          saveText.innerText = editId ? 'আপডেট সংরক্ষণ করুন' : 'বইটি প্রকাশ করুন';
+          return;
+        }
+
+        const { data: publicUrlData } = supabaseClient.storage.from('book-covers').getPublicUrl(fileName);
+        coverUrl = publicUrlData.publicUrl;
+      }
+
+      if (pdfInput.files.length > 0) {
+        saveText.innerText = 'PDF ফাইল আপলোড হচ্ছে...';
+        const pFile = pdfInput.files[0];
+        const pExt = pFile.name.split('.').pop();
+        const pName = `pdf-${Date.now()}-${Math.random().toString(36).substring(2)}.${pExt}`;
+
+        const { error: pdfErr } = await supabaseClient.storage.from('book-pdfs').upload(pName, pFile);
+        if (pdfErr) {
+          alert('PDF আপলোড করতে সমস্যা হয়েছে: ' + pdfErr.message);
+          saveBtn.disabled = false;
+          saveText.innerText = editId ? 'আপডেট সংরক্ষণ করুন' : 'বইটি প্রকাশ করুন';
+          return;
+        }
+
+        const { data: pdfUrlData } = supabaseClient.storage.from('book-pdfs').getPublicUrl(pName);
+        pdfUrl = pdfUrlData.publicUrl;
+      }
+
+      const bookPayload = {
+        title, 
+        author, 
+        isbn, 
+        price: basePrice, 
+        discount_price: baseDiscount,
+        price_ebook,
+        discount_ebook,
+        price_paperback,
+        discount_paperback,
+        price_hardcover,
+        discount_hardcover,
+        description: desc, 
+        cover_image_url: coverUrl, 
+        pdf_url: pdfUrl
+      };
+
+      let error = null;
+      if (editId) {
+        const res = await supabaseClient.from('books').update(bookPayload).eq('id', editId);
+        error = res.error;
+      } else {
+        const res = await supabaseClient.from('books').insert(bookPayload);
+        error = res.error;
+      }
+
+      saveBtn.disabled = false;
+      saveText.innerText = editId ? 'আপডেট সংরক্ষণ করুন' : 'বইটি প্রকাশ করুন';
+
+      if (!error) {
+        alert(editId ? 'বইটির তথ্য ও ফরম্যাট মূল্য সফলভাবে আপডেট হয়েছে!' : 'নতুন বইটি সফলভাবে ক্যাটালগে যুক্ত হয়েছে!');
+        resetBookForm();
+        loadBooks();
+      } else {
+        alert('ত্রুটি: ' + error.message);
+      }
+    }
+
+    async function handleDeleteBook(id) {
+      if (!confirm('আপনি কি নিশ্চিত বইটি ক্যাটালগ থেকে মুছে ফেলতে চান?')) return;
+      await supabaseClient.from('books').delete().eq('id', id);
+      loadBooks();
+    }
+
+    // --- ৩. কুপন লোড ও ম্যানেজমেন্ট ---
+    async function loadCoupons() {
+      const list = document.getElementById('coupons-admin-list');
+      const { data } = await supabaseClient.from('coupons').select('*').order('created_at', { ascending: false });
+
+      if (!data || data.length === 0) {
+        list.innerHTML = `<p class="text-xs text-stone-400">কোনো কুপন তৈরি করা নেই।</p>`;
+        return;
+      }
+
+      list.innerHTML = '';
+      data.forEach(c => {
+        const item = document.createElement('div');
+        item.className = "bg-white p-4 rounded-xl border border-stone-200 shadow-sm flex items-center justify-between";
+        item.innerHTML = `
+          <div>
+            <span class="font-bold text-sm tracking-wider bg-stone-100 text-stone-800 px-2.5 py-1 rounded-md">${c.code}</span>
+            <p class="text-xs text-stone-500 mt-1">${c.discount_value}% ছাড় (ন্যূনতম অর্ডার ₹${c.min_order_value})</p>
+          </div>
+          <button onclick="handleDeleteCoupon('${c.id}')" class="text-xs text-red-600 hover:bg-red-50 p-2 rounded-lg font-medium transition flex items-center gap-1">
+            <i data-lucide="trash-2" class="w-4 h-4"></i> বাতিল
+          </button>
+        `;
+        list.appendChild(item);
+      });
+      lucide.createIcons();
+    }
+
+    async function handleAddCoupon(e) {
+      e.preventDefault();
+      const code = document.getElementById('coupon-code').value.trim().toUpperCase();
+      const pct = Number(document.getElementById('coupon-pct').value);
+      const min = Number(document.getElementById('coupon-min').value || 0);
+
+      const { error } = await supabaseClient.from('coupons').insert({
+        code, discount_type: 'percentage', discount_value: pct, min_order_value: min, is_active: true
+      });
+
+      if (!error) {
+        e.target.reset();
+        loadCoupons();
+        alert('কুপন সফলভাবে তৈরি হয়েছে!');
+      } else {
+        alert('কুপন তৈরি করতে ত্রুটি: ' + error.message);
+      }
+    }
+
+    async function handleDeleteCoupon(id) {
+      if (!confirm('কুপনটি বন্ধ করতে চান?')) return;
+      await supabaseClient.from('coupons').delete().eq('id', id);
+      loadCoupons();
+    }
+
+    lucide.createIcons();
+  </script>
+</body>
+</html>

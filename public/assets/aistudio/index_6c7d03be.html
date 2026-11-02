@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>হিজিবিজি পাবলিশার্স | HIJIBIJI PUBLISHERS</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Noto+Serif+Bengali:wght@600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://sdk.cashfree.com/js/v3/cashfree.js"></script>
+
+  <style>
+    body { font-family: 'Hind Siliguri', sans-serif; }
+    .font-serif-bn { font-family: 'Noto Serif Bengali', serif; }
+  </style>
+</head>
+<body class="bg-amber-50/30 text-stone-900 min-h-screen flex flex-col">
+
+  <!-- নেভিগেশন বার -->
+  <header class="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-amber-100 shadow-sm">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+      
+      <!-- লোগো ও ব্র্যান্ড নাম -->
+      <div class="flex items-center gap-3">
+        <div class="w-12 h-12 rounded-xl bg-white border border-amber-200 overflow-hidden flex items-center justify-center shadow-sm">
+          <img src="logo.png" alt="হিজিবিজি পাবলিশার্স" class="w-full h-full object-cover" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+          <span style="display:none;" class="text-xl font-bold text-emerald-800 font-serif-bn">হি</span>
+        </div>
+        <div>
+          <h1 class="text-xl md:text-2xl font-bold font-serif-bn text-emerald-900 leading-tight">হিজিবিজি পাবলিশার্স</h1>
+          <p class="text-xs text-amber-800 font-medium">HIJIBIJI PUBLISHERS • Kolkata</p>
+        </div>
+      </div>
+
+      <!-- ডানদিকের বাটনসমূহ -->
+      <div class="flex items-center gap-2.5">
+        <a href="admin.html" class="flex items-center gap-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 hover:text-emerald-900 px-3 py-2 rounded-xl text-xs font-semibold tracking-wider transition border border-stone-200 shadow-sm" title="Admin Control Panel">
+          <i data-lucide="shield" class="w-3.5 h-3.5 text-emerald-800"></i>
+          <span>ADMIN</span>
+        </a>
+
+        <button onclick="toggleCartDrawer(true)" class="relative flex items-center gap-2 bg-emerald-800 hover:bg-emerald-900 text-white px-4 py-2 rounded-xl font-medium transition shadow-sm">
+          <i data-lucide="shopping-bag" class="w-5 h-5"></i>
+          <span class="hidden sm:inline">বইয়ের থলি</span>
+          <span id="cart-count-badge" class="bg-amber-500 text-stone-900 text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">0</span>
+        </button>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- ব্যানার -->
+  <section class="bg-gradient-to-b from-amber-100/60 to-transparent py-10 px-4 border-b border-amber-100">
+    <div class="max-w-4xl mx-auto text-center space-y-4">
+      <div class="inline-flex items-center gap-2 bg-amber-200/60 text-amber-900 px-3 py-1 rounded-full text-xs font-semibold tracking-wide">
+        <span>গল্প থেকে বই, বই থেকে পাঠক • Kolkata to World</span>
+      </div>
+      <h2 class="text-2xl md:text-4xl font-bold font-serif-bn text-stone-900 leading-snug">
+        মৌলিক থ্রিলার, সমকালীন উপন্যাস ও কবিতার নতুন সম্ভার
+      </h2>
+      <p class="text-stone-700 text-sm md:text-base max-w-2xl mx-auto">
+        HIJIBIJI প্রকাশনার মৌলিক থ্রিলার, সমকালীন উপন্যাস ও কবিতার নতুন বইগুলো এখন বিশেষ ছাড়ে ঘরে বসেই অর্ডার করুন। সরাসরি কোলকাতা থেকে দ্রুততম হোম ডেলিভারি।
+      </p>
+      <div class="pt-2 text-xs text-emerald-800 font-medium flex items-center justify-center gap-4">
+        <span class="flex items-center gap-1"><i data-lucide="truck" class="w-4 h-4"></i> ফ্রি হোম ডেলিভারি</span>
+        <span class="flex items-center gap-1"><i data-lucide="shield-check" class="w-4 h-4"></i> ১০০% মৌলিক বই</span>
+        <span class="flex items-center gap-1"><i data-lucide="tag" class="w-4 h-4"></i> বিশেষ ছাড়</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ক্যাটালগ -->
+  <main class="max-w-6xl mx-auto px-4 py-10 flex-1 w-full">
+    <div class="flex items-center justify-between mb-8 pb-3 border-b border-stone-200">
+      <div>
+        <h3 class="text-xl md:text-2xl font-bold font-serif-bn text-stone-900">প্রকাশিত বইসমূহ</h3>
+        <p class="text-xs text-stone-500">আপনার পছন্দের বইটি বেছে নিন ও থলিতে রাখুন</p>
+      </div>
+    </div>
+
+    <div id="loading-state" class="text-center py-16 text-stone-500 space-y-2">
+      <div class="animate-spin inline-block w-8 h-8 border-4 border-emerald-800 border-t-transparent rounded-full"></div>
+      <p>বইয়ের তালিকা লোড হচ্ছে...</p>
+    </div>
+
+    <div id="books-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 hidden"></div>
+  </main>
+
+  <!-- শপিং কার্ট ড্রয়ার -->
+  <div id="cart-drawer" class="fixed inset-0 z-50 overflow-hidden hidden">
+    <div onclick="toggleCartDrawer(false)" class="absolute inset-0 bg-stone-900/50 backdrop-blur-sm transition-opacity"></div>
+    <div class="fixed inset-y-0 right-0 max-w-full flex">
+      <div class="w-screen max-w-md bg-white shadow-2xl flex flex-col">
+        <div class="p-4 bg-stone-50 border-b border-stone-200 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <i data-lucide="shopping-bag" class="w-5 h-5 text-emerald-800"></i>
+            <h3 class="text-lg font-bold font-serif-bn text-stone-900">আপনার বইয়ের থলি</h3>
+          </div>
+          <button onclick="toggleCartDrawer(false)" class="text-stone-400 hover:text-stone-600 p-1">
+            <i data-lucide="x" class="w-6 h-6"></i>
+          </button>
+        </div>
+
+        <div id="cart-items-container" class="flex-1 overflow-y-auto p-4 space-y-4"></div>
+
+        <div class="border-t border-stone-200 bg-stone-50/60 p-4 space-y-3">
+          <div class="space-y-1">
+            <label class="text-xs font-semibold text-stone-600">কুপন কোড (যদি থাকে)</label>
+            <div class="flex gap-2">
+              <input id="coupon-input" type="text" placeholder="যেমন: HIJIBIJIPRE" class="flex-1 uppercase text-sm border border-stone-300 rounded-lg px-3 py-2 outline-none focus:border-emerald-700 bg-white" />
+              <button onclick="applyCoupon()" class="bg-stone-800 hover:bg-stone-900 text-white text-xs font-semibold px-4 py-2 rounded-lg transition">প্রয়োগ</button>
+            </div>
+            <p id="coupon-message" class="text-xs mt-1 hidden"></p>
+          </div>
+
+          <div class="space-y-1.5 pt-2 text-sm text-stone-600 border-t border-stone-200">
+            <div class="flex justify-between">
+              <span>বইয়ের মোট মূল্য:</span>
+              <span id="subtotal-amount" class="font-medium">₹০</span>
+            </div>
+            <div id="discount-row" class="flex justify-between text-emerald-700 hidden">
+              <span>কুপন ছাড়:</span>
+              <span id="discount-amount" class="font-medium">-₹০</span>
+            </div>
+            <div class="flex justify-between text-xs text-stone-500">
+              <span>ডেলিভারি চার্জ:</span>
+              <span class="text-emerald-700 font-bold">বিনামূল্যে (Free)</span>
+            </div>
+            <div class="flex justify-between text-base font-bold text-stone-900 pt-1 border-t border-stone-200">
+              <span>সর্বমোট প্রদেয়:</span>
+              <span id="total-amount" class="text-emerald-900 font-serif-bn text-lg">₹০</span>
+            </div>
+          </div>
+
+          <button onclick="openCheckoutModal()" class="w-full bg-emerald-800 hover:bg-emerald-900 text-white font-semibold py-3 rounded-xl transition shadow flex items-center justify-center gap-2">
+            <span>ডেলিভারি তথ্য ও পেমেন্ট</span>
+            <i data-lucide="arrow-right" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ডেলিভারি অ্যাড্রেস ও চেকআউট পপ-আপ -->
+  <div id="checkout-modal" class="fixed inset-0 z-50 overflow-y-auto hidden">
+    <div onclick="toggleCheckoutModal(false)" class="fixed inset-0 bg-stone-900/60 backdrop-blur-sm"></div>
+    <div class="flex min-h-full items-center justify-center p-4">
+      <div class="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl p-6 border border-stone-100 z-10">
+        
+        <div class="flex justify-between items-center pb-3 border-b border-stone-100 mb-4">
+          <div>
+            <h3 class="text-lg font-bold font-serif-bn text-stone-900">ডেলিভারি ও যোগাযোগের ঠিকানা</h3>
+            <p class="text-xs text-stone-500">বই দ্রুততম সময়ে পৌঁছানোর জন্য সঠিক তথ্য দিন</p>
+          </div>
+          <button onclick="toggleCheckoutModal(false)" class="text-stone-400 hover:text-stone-600">
+            <i data-lucide="x" class="w-5 h-5"></i>
+          </button>
+        </div>
+
+        <form onsubmit="handlePlaceOrder(event)" class="space-y-4">
+          <div>
+            <label class="block text-xs font-semibold text-stone-700 mb-1">আপনার পুরো নাম *</label>
+            <input required id="cust-name" type="text" placeholder="যেমন: সৌমেন রায়" class="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:border-emerald-700 outline-none" />
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-stone-700 mb-1">ফোন / হোয়াটসঅ্যাপ নম্বর *</label>
+              <input required id="cust-phone" type="tel" placeholder="১০ সংখ্যার মোবাইল নম্বর" class="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:border-emerald-700 outline-none" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-stone-700 mb-1">পিনকোড (PIN Code) *</label>
+              <input required id="cust-pin" type="text" placeholder="যেমন: 700057" class="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:border-emerald-700 outline-none" />
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-stone-700 mb-1">সম্পূর্ণ ঠিকানা ও ল্যান্ডমার্ক *</label>
+            <textarea required id="cust-address" rows="3" placeholder="বাড়ি নং, রাস্তা, এলাকা, নিকটবর্তী স্থান ও শহর" class="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:border-emerald-700 outline-none"></textarea>
+          </div>
+
+          <div class="bg-amber-50/70 p-3 rounded-lg flex justify-between items-center text-sm border border-amber-200/50">
+            <span class="text-stone-700 font-medium">প্রদেয় সর্বমোট অঙ্ক:</span>
+            <span id="modal-pay-amount" class="text-base font-bold font-serif-bn text-emerald-900">₹০</span>
+          </div>
+
+          <button id="pay-submit-btn" type="submit" class="w-full bg-emerald-800 hover:bg-emerald-900 text-white font-semibold py-3 rounded-xl transition shadow flex items-center justify-center gap-2">
+            <i data-lucide="lock" class="w-4 h-4"></i>
+            <span>নিরাপদ পেমেন্ট সম্পন্ন করুন (UPI / Cards)</span>
+          </button>
+        </form>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- পেমেন্ট সাকসেসফুল কনফার্মেশন মোডাল -->
+  <div id="payment-success-modal" class="fixed inset-0 z-50 overflow-y-auto hidden">
+    <div class="fixed inset-0 bg-stone-900/70 backdrop-blur-sm"></div>
+    <div class="flex min-h-full items-center justify-center p-4">
+      <div class="relative w-full max-w-md bg-white rounded-3xl shadow-2xl p-6 sm:p-8 text-center border border-emerald-100 z-10">
+        
+        <div class="w-16 h-16 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center mx-auto mb-4">
+          <i data-lucide="check-circle" class="w-10 h-10"></i>
+        </div>
+
+        <span class="inline-block bg-emerald-100 text-emerald-900 text-xs font-bold px-3 py-1 rounded-full mb-2">
+          পেমেন্ট সফল হয়েছে
+        </span>
+
+        <h3 class="text-2xl font-bold font-serif-bn text-stone-900 mb-2">আপনার বুকিং নিশ্চিত!</h3>
+        <p class="text-xs sm:text-sm text-stone-600 leading-relaxed mb-6">
+          আপনার পেমেন্ট সফলভাবে গ্রহণ করা হয়েছে। আগামী ৩-৫ কার্যদিবসের মধ্যে আপনার দেওয়া ঠিকানায় বইটি পৌঁছে যাবে।
+        </p>
+
+        <div class="bg-amber-50/60 rounded-2xl p-4 text-xs text-stone-700 border border-amber-200/60 text-left space-y-2 mb-6">
+          <div class="flex justify-between">
+            <span class="text-stone-500">অর্ডার নম্বর:</span>
+            <span id="confirmed-order-id" class="font-mono font-bold text-stone-800">লোড হচ্ছে...</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-stone-500">বই / আইটেম:</span>
+            <span id="confirmed-items" class="font-medium text-emerald-900">লোড হচ্ছে...</span>
+          </div>
+          <div class="flex justify-between border-t border-amber-200/50 pt-1.5">
+            <span class="text-stone-500">পরিশোধিত অঙ্ক:</span>
+            <span id="confirmed-amount" class="font-bold font-serif-bn text-stone-900 text-sm">₹০</span>
+          </div>
+        </div>
+
+        <div class="space-y-2">
+          <button onclick="closeSuccessModal()" class="w-full bg-emerald-800 hover:bg-emerald-900 text-white font-semibold py-3 rounded-xl transition shadow">
+            ঠিক আছে
+          </button>
+          <p class="text-[11px] text-stone-500">
+            যেকোনো প্রয়োজনে কল বা WhatsApp করুন: <strong>+91 7003255857</strong>
+          </p>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ফুটার ও কমপ্লায়েন্স পলিসিসমূহ -->
+  <footer class="bg-stone-900 text-stone-300 py-8 border-t border-stone-800 text-center text-xs space-y-3">
+    <p class="font-serif-bn text-base text-amber-300">হিজিবিজি পাবলিশার্স • HIJIBIJI PUBLISHERS</p>
+    <p class="text-stone-400">গল্প থেকে বই, বই থেকে পাঠক • Kolkata to World</p>
+    
+    <div class="flex justify-center flex-wrap gap-4 text-stone-400 pt-2 pb-1 underline decoration-stone-600">
+      <button type="button" onclick="openPolicyModal('contact')" class="hover:text-amber-200">Contact Us</button>
+      <button type="button" onclick="openPolicyModal('terms')" class="hover:text-amber-200">Terms & Conditions</button>
+      <button type="button" onclick="openPolicyModal('refund')" class="hover:text-amber-200">Refunds & Cancellations</button>
+    </div>
+
+    <p class="text-stone-500 pt-2">© ২০২৬ হিজিবিজি পাবলিশার্স। সর্বস্বত্ব সংরক্ষিত। সমস্ত পণ্যের মূল্য ভারতীয় মুদ্রায় (INR)।</p>
+  </footer>
+
+  <!-- পলিসি পপ-আপ মোডাল -->
+  <div id="policy-modal" class="fixed inset-0 z-50 overflow-y-auto hidden">
+    <div onclick="closePolicyModal()" class="fixed inset-0 bg-stone-900/60 backdrop-blur-sm"></div>
+    <div class="flex min-h-full items-center justify-center p-4">
+      <div class="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl p-6 text-stone-800 z-10 text-left">
+        <div class="flex justify-between items-center pb-3 border-b border-stone-100 mb-3">
+          <h4 id="policy-title" class="font-bold text-base text-stone-900"></h4>
+          <button type="button" onclick="closePolicyModal()" class="text-stone-400 hover:text-stone-600 text-lg font-bold">✕</button>
+        </div>
+        <div id="policy-content" class="text-xs leading-relaxed space-y-2 max-h-80 overflow-y-auto text-stone-600"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const SUPABASE_URL = 'https://ypvuxujhtvckryvzvdaw.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_2PqVctfevcK4ooUMMM0KYA_2NUcHszh';
+
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const cashfree = Cashfree({ mode: "production" });
+
+    let booksData = [];
+    let cart = [];
+    let appliedCoupon = null;
+
+    async function fetchBooks() {
+      try {
+        const { data, error } = await supabaseClient.from('books').select('*').order('created_at', { ascending: false });
+        if (error) throw error;
+        booksData = data || [];
+        renderBooks(booksData);
+      } catch (err) {
+        document.getElementById('loading-state').innerHTML = `<p class="text-red-600">বইয়ের তালিকা লোড হতে সমস্যা হয়েছে।</p>`;
+      }
+    }
+
+    function renderBooks(books) {
+      document.getElementById('loading-state').classList.add('hidden');
+      const grid = document.getElementById('books-grid');
+      grid.classList.remove('hidden');
+      grid.innerHTML = '';
+
+      if (books.length === 0) {
+        grid.innerHTML = `<div class="col-span-full text-center py-12 text-stone-500">বর্তমানে কোনো বই প্রদর্শনের জন্য উপলব্ধ নেই।</div>`;
+        return;
+      }
+
+      books.forEach(book => {
+        const hasDiscount = book.discount_price && book.discount_price < book.price;
+        const displayPrice = hasDiscount ? book.discount_price : book.price;
+
+        // বই অনুযায়ী সঠিক সেলস পেজ লিংক নির্ধারণ (বাংলা যুক্তবর্ণ ও স্পেসের নিরাপদ হ্যান্ডলিং)
+        let bookUrl = null;
+        const titleClean = (book.title || '').trim();
+
+        if (titleClean.includes("শিমলায় সংকট") || titleClean.includes("শিমলা")) {
+          bookUrl = "shimlay-sonkot.html";
+        } else if (titleClean.includes("ছাদ")) {
+          bookUrl = "chad.html";
+        }
+
+        const hasSalesPage = bookUrl !== null;
+
+        const actionButton = hasSalesPage
+          ? `<a href="${bookUrl}" class="w-full bg-emerald-800 hover:bg-emerald-900 text-white font-medium text-sm py-2.5 rounded-xl transition flex items-center justify-center gap-2">
+               <i data-lucide="book-open" class="w-4 h-4"></i>
+               <span>বিস্তারিত ও অর্ডার</span>
+             </a>`
+          : `<button onclick="addToCart('${book.id}')" class="w-full bg-stone-900 hover:bg-emerald-900 text-white font-medium text-sm py-2.5 rounded-xl transition flex items-center justify-center gap-2">
+               <i data-lucide="plus" class="w-4 h-4"></i>
+               <span>থলিতে রাখুন</span>
+             </button>`;
+
+        const card = document.createElement('div');
+        card.className = "bg-white rounded-2xl border border-stone-200/80 shadow-sm overflow-hidden flex flex-col hover:shadow-md transition";
+        card.innerHTML = `
+          <div class="h-64 bg-stone-100 overflow-hidden relative ${hasSalesPage ? 'cursor-pointer' : ''}" ${hasSalesPage ? `onclick="location.href='${bookUrl}'"` : ''}>
+            <img src="${book.cover_image_url || 'https://via.placeholder.com/300x400'}" alt="${book.title}" class="w-full h-full object-cover">
+            ${hasDiscount ? `<span class="absolute top-3 right-3 bg-red-600 text-white text-xs font-bold px-2 py-1 rounded-md shadow">ছাড়</span>` : ''}
+          </div>
+          <div class="p-5 flex-1 flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <p class="text-xs text-amber-800 font-semibold">${book.author}</p>
+                ${book.isbn ? `<span class="text-[10px] font-mono bg-stone-100 text-stone-500 px-1.5 py-0.5 rounded">ISBN: ${book.isbn}</span>` : ''}
+              </div>
+              <h4 class="text-lg font-bold font-serif-bn text-stone-900 mb-2 ${hasSalesPage ? 'cursor-pointer hover:text-emerald-800 transition' : ''}" ${hasSalesPage ? `onclick="location.href='${bookUrl}'"` : ''}>${book.title}</h4>
+              <p class="text-xs text-stone-600 line-clamp-2 mb-4">${book.description || ''}</p>
+            </div>
+            <div>
+              <div class="flex items-baseline gap-2 mb-4">
+                <span class="text-xl font-bold font-serif-bn text-emerald-900">₹${displayPrice}</span>
+                ${hasDiscount ? `<span class="text-xs text-stone-400 line-through">₹${book.price}</span>` : ''}
+              </div>
+              ${actionButton}
+            </div>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+      lucide.createIcons();
+    }
+
+    function addToCart(bookId) {
+      const book = booksData.find(b => b.id === bookId);
+      if (!book) return;
+
+      const existing = cart.find(item => item.id === bookId);
+      if (existing) {
+        existing.qty += 1;
+      } else {
+        const unitPrice = (book.discount_price && book.discount_price < book.price) ? Number(book.discount_price) : Number(book.price);
+        cart.push({ id: book.id, title: book.title, price: unitPrice, image: book.cover_image_url, qty: 1 });
+      }
+      updateCartUI();
+      toggleCartDrawer(true);
+    }
+
+    function updateQty(bookId, delta) {
+      const item = cart.find(i => i.id === bookId);
+      if (!item) return;
+      item.qty += delta;
+      if (item.qty <= 0) cart = cart.filter(i => i.id !== bookId);
+      updateCartUI();
+    }
+
+    function getPayableAmount() {
+      const subtotal = cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+      let discount = 0;
+      if (appliedCoupon && subtotal >= appliedCoupon.min_order_value) {
+        discount = appliedCoupon.discount_type === 'percentage' ? (subtotal * appliedCoupon.discount_value) / 100 : appliedCoupon.discount_value;
+      }
+      return { subtotal, discount, total: Math.max(0, subtotal - discount) };
+    }
+
+    function updateCartUI() {
+      const container = document.getElementById('cart-items-container');
+      const countBadge = document.getElementById('cart-count-badge');
+      const subtotalEl = document.getElementById('subtotal-amount');
+      const discountRow = document.getElementById('discount-row');
+      const discountEl = document.getElementById('discount-amount');
+      const totalEl = document.getElementById('total-amount');
+
+      const totalItems = cart.reduce((sum, item) => sum + item.qty, 0);
+      countBadge.innerText = totalItems;
+
+      if (cart.length === 0) {
+        container.innerHTML = `<div class="text-center py-12 text-stone-400"><p class="text-sm">আপনার থলিতে এখনও কোনো বই নেই।</p></div>`;
+        subtotalEl.innerText = '₹০';
+        discountRow.classList.add('hidden');
+        totalEl.innerText = '₹০';
+        lucide.createIcons();
+        return;
+      }
+
+      container.innerHTML = '';
+      cart.forEach(item => {
+        const row = document.createElement('div');
+        row.className = "flex gap-3 items-center border-b border-stone-100 pb-3";
+        row.innerHTML = `
+          <img src="${item.image || 'https://via.placeholder.com/80'}" class="w-12 h-16 object-cover rounded bg-stone-100">
+          <div class="flex-1">
+            <h5 class="text-sm font-semibold font-serif-bn text-stone-900">${item.title}</h5>
+            <p class="text-xs text-stone-500">₹${item.price} x ${item.qty}</p>
+            <div class="flex items-center gap-2 mt-1">
+              <button onclick="updateQty('${item.id}', -1)" class="w-6 h-6 rounded bg-stone-100 text-xs">-</button>
+              <span class="text-xs font-semibold">${item.qty}</span>
+              <button onclick="updateQty('${item.id}', 1)" class="w-6 h-6 rounded bg-stone-100 text-xs">+</button>
+            </div>
+          </div>
+        `;
+        container.appendChild(row);
+      });
+
+      const { subtotal, discount, total } = getPayableAmount();
+      subtotalEl.innerText = `₹${subtotal}`;
+      if (discount > 0) {
+        discountRow.classList.remove('hidden');
+        discountEl.innerText = `-₹${Math.round(discount)}`;
+      } else {
+        discountRow.classList.add('hidden');
+      }
+      totalEl.innerText = `₹${Math.round(total)}`;
+      lucide.createIcons();
+    }
+
+    async function applyCoupon() {
+      const code = document.getElementById('coupon-input').value.trim().toUpperCase();
+      if (!code) return;
+
+      const { data, error } = await supabaseClient.from('coupons').select('*').eq('code', code).eq('is_active', true).single();
+      const msgEl = document.getElementById('coupon-message');
+      msgEl.classList.remove('hidden');
+
+      if (error || !data) {
+        msgEl.innerText = 'অবৈধ বা মেয়াদোত্তীর্ণ কুপন';
+        msgEl.className = 'text-xs mt-1 text-red-600';
+        return;
+      }
+
+      const { subtotal } = getPayableAmount();
+      if (subtotal < data.min_order_value) {
+        msgEl.innerText = `ন্যূনতম ₹${data.min_order_value} টাকার অর্ডারে কুপন প্রযোজ্য`;
+        msgEl.className = 'text-xs mt-1 text-red-600';
+        return;
+      }
+
+      appliedCoupon = data;
+      msgEl.innerText = 'কুপন সফলভাবে যুক্ত হয়েছে!';
+      msgEl.className = 'text-xs mt-1 text-emerald-700';
+      updateCartUI();
+    }
+
+    function toggleCartDrawer(open) {
+      document.getElementById('cart-drawer').classList.toggle('hidden', !open);
+    }
+
+    function toggleCheckoutModal(open) {
+      document.getElementById('checkout-modal').classList.toggle('hidden', !open);
+    }
+
+    function openCheckoutModal() {
+      if (cart.length === 0) {
+        alert('আপনার থলি খালি!');
+        return;
+      }
+      toggleCartDrawer(false);
+      const { total } = getPayableAmount();
+      document.getElementById('modal-pay-amount').innerText = `₹${Math.round(total)}`;
+      toggleCheckoutModal(true);
+    }
+
+    async function handlePlaceOrder(e) {
+      e.preventDefault();
+      const submitBtn = document.getElementById('pay-submit-btn');
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = `<span>পেমেন্ট গেটওয়ে লোড হচ্ছে...</span>`;
+
+      const name = document.getElementById('cust-name').value;
+      const phone = document.getElementById('cust-phone').value;
+      const pin = document.getElementById('cust-pin').value;
+      const address = document.getElementById('cust-address').value;
+      const fullAddress = `${address}, পিন: ${pin}`;
+
+      const { total } = getPayableAmount();
+
+      try {
+        const itemsList = cart.map(item => `${item.title} (x${item.qty})`).join(', ');
+
+        const { data: orderData, error: orderErr } = await supabaseClient.from('orders').insert({
+          customer_name: name,
+          customer_phone: phone,
+          shipping_address: fullAddress,
+          total_amount: Math.round(total),
+          order_items: itemsList,
+          payment_status: 'PENDING'
+        }).select().single();
+
+        if (orderErr) throw orderErr;
+
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/create-cashfree-order`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_ANON_KEY
+          },
+          body: JSON.stringify({
+            order_id: orderData.id,
+            order_amount: Math.round(total),
+            customer_name: name,
+            customer_phone: phone
+          })
+        });
+
+        const resData = await response.json();
+
+        if (resData && resData.payment_session_id) {
+          cashfree.checkout({
+            paymentSessionId: resData.payment_session_id,
+            redirectTarget: "_self"
+          });
+        } else {
+          alert('পেমেন্ট সেশন তৈরি করতে সমস্যা হয়েছে।');
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = `<span>নিরাপদ পেমেন্ট সম্পন্ন করুন</span>`;
+        }
+
+      } catch (err) {
+        console.error(err);
+        alert('অর্ডার প্রক্রিয়া করতে ত্রুটি দেখা দিয়েছে।');
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = `<span>নিরাপদ পেমেন্ট সম্পন্ন করুন</span>`;
+      }
+    }
+
+    const policies = {
+      contact: {
+        title: "Contact Us",
+        body: `<p><strong>HIJIBIJI PUBLISHERS</strong><br>Kolkata, West Bengal, India<br>Phone/WhatsApp: +91 7003255857<br>Email: contact@hijibijipublishers.com</p><p>আমাদের সাথে যোগাযোগ করতে বা অর্ডারের অবস্থা জানতে সরাসরি ফোন বা হোয়াটসঅ্যাপ করতে পারেন।</p>`
+      },
+      terms: {
+        title: "Terms & Conditions",
+        body: `<p>1. সমস্ত বই মৌলিক ও কপিরাইট আইন দ্বারা সুরক্ষিত।</p><p>2. অর্ডারের পর ৩-৫ কার্যদিবসের মধ্যে কোলকাতা থেকে সারা ভারতে সরাসরি কুরিয়ারের মাধ্যমে বই পৌঁছে দেওয়া হয়।</p><p>3. সমস্ত মূল্য ভারতীয় রুপি (INR)-তে ধার্য এবং এতে ডেলিভারি চার্জ সম্পূর্ণ বিনামূল্যে।</p>`
+      },
+      refund: {
+        title: "Refunds & Cancellations",
+        body: `<p>1. কুরিয়ার পৌঁছানোর পর বইয়ে কোনো প্রিন্টিং বা বাঁধাই সংক্রান্ত ত্রুটি থাকলে ডেলিভারির ৪৮ ঘণ্টার মধ্যে জানালে সম্পূর্ণ বিনামূল্যে বই রিপ্লেস করা হবে।</p><p>2. অর্ডার বাতিল করতে চাইলে শিপমেন্ট রওনা হওয়ার পূর্বেই আমাদের হেল্পলাইন নম্বরে যোগাযোগ করতে হবে। রিফান্ড অনুমোদিত হলে ৭ কার্যদিবসের মধ্যে মূল পেমেন্ট মাধ্যমে টাকা ফেরত দেওয়া হবে।</p>`
+      }
+    };
+
+    function openPolicyModal(type) {
+      document.getElementById('policy-title').innerText = policies[type].title;
+      document.getElementById('policy-content').innerHTML = policies[type].body;
+      document.getElementById('policy-modal').classList.remove('hidden');
+    }
+
+    function closePolicyModal() {
+      document.getElementById('policy-modal').classList.add('hidden');
+    }
+
+    // পেমেন্ট রিটার্ন চেক ফাংশন
+    async function checkPaymentReturnStatus() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const orderId = urlParams.get('order_id');
+
+      if (!orderId) return;
+
+      try {
+        const { data: order, error } = await supabaseClient
+          .from('orders')
+          .select('*')
+          .eq('id', orderId)
+          .single();
+
+        if (error || !order) return;
+
+        document.getElementById('confirmed-order-id').innerText = order.id.slice(0, 8).toUpperCase();
+        document.getElementById('confirmed-items').innerText = order.order_items || 'বই সম্ভার';
+        document.getElementById('confirmed-amount').innerText = `₹${order.total_amount}`;
+        
+        document.getElementById('payment-success-modal').classList.remove('hidden');
+        lucide.createIcons();
+
+        if (order.payment_status !== 'DELIVERED') {
+          await supabaseClient.from('orders').update({ payment_status: 'SUCCESS' }).eq('id', orderId);
+        }
+
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    function closeSuccessModal() {
+      document.getElementById('payment-success-modal').classList.add('hidden');
+    }
+
+    fetchBooks();
+    checkPaymentReturnStatus();
+  </script>
+</body>
+</html>
