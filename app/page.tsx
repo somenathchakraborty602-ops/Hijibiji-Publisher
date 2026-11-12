@@ -22,10 +22,25 @@ import { CheckoutModal } from '@/components/CheckoutModal';
 import { PaymentSuccessModal } from '@/components/PaymentSuccessModal';
 import { PolicyModal, PolicyType } from '@/components/PolicyModal';
 import { Footer } from '@/components/Footer';
-import { supabase, Book, Coupon, INITIAL_BOOKS } from '@/lib/supabase';
+import { HeroSlider } from '@/components/HeroSlider';
+import { supabase, Book, Coupon, INITIAL_BOOKS, BannerSlide, INITIAL_SLIDES } from '@/lib/supabase';
 
 export default function HomePage() {
   const [books, setBooks] = useState<Book[]>(INITIAL_BOOKS);
+  const [slides, setSlides] = useState<BannerSlide[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('hijibiji_banners');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch (e) {
+        console.warn('Could not read cached banners:', e);
+      }
+    }
+    return INITIAL_SLIDES;
+  });
   const [loading, setLoading] = useState(true);
   const [cart, setCart] = useState<CartItem[]>(() => {
     if (typeof window !== 'undefined') {
@@ -94,6 +109,51 @@ export default function HomePage() {
     }
 
     fetchBooks();
+  }, []);
+
+  // Fetch banners from Supabase / sync with admin updates
+  useEffect(() => {
+    async function fetchBanners() {
+      try {
+        const { data, error } = await supabase
+          .from('banners')
+          .select('*')
+          .order('order_index', { ascending: true });
+
+        if (!error && data && data.length > 0) {
+          setSlides(data);
+          try {
+            localStorage.setItem('hijibiji_banners', JSON.stringify(data));
+          } catch {}
+        }
+      } catch (err) {
+        console.warn('Could not fetch banners from DB, using fallback:', err);
+      }
+    }
+
+    fetchBanners();
+
+    // Listen to local storage or custom event when admin changes slides
+    const handleBannersSync = () => {
+      try {
+        const saved = localStorage.getItem('hijibiji_banners');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setSlides(parsed);
+          }
+        }
+      } catch (e) {
+        console.warn(e);
+      }
+    };
+
+    window.addEventListener('hijibiji_banners_updated', handleBannersSync);
+    window.addEventListener('storage', handleBannersSync);
+    return () => {
+      window.removeEventListener('hijibiji_banners_updated', handleBannersSync);
+      window.removeEventListener('storage', handleBannersSync);
+    };
   }, []);
 
   // Check for Cashfree payment return (?order_id=...)
@@ -290,13 +350,13 @@ export default function HomePage() {
 
       {/* Hero Banner */}
       <section className="bg-gradient-to-b from-amber-100/70 via-amber-50/40 to-transparent pt-8 pb-12 px-4 border-b border-amber-100/60 relative overflow-hidden">
-        <div className="max-w-4xl mx-auto text-center space-y-4 relative z-10">
+        <div className="max-w-5xl mx-auto text-center space-y-4 relative z-10">
           <div className="inline-flex items-center gap-2 bg-amber-200/80 text-amber-950 px-3.5 py-1 rounded-full text-xs font-semibold tracking-wide border border-amber-300/50 shadow-2xs">
             <Sparkles className="w-3.5 h-3.5 text-amber-700" />
             <span>গল্প থেকে বই, বই থেকে পাঠক • Kolkata to World</span>
           </div>
 
-          <h2 className="text-2xl sm:text-4xl md:text-5xl font-bold font-serif-bn text-stone-900 leading-tight">
+          <h2 className="text-lg sm:text-2xl md:text-3xl font-bold font-serif-bn text-stone-900 leading-tight sm:whitespace-nowrap">
             মৌলিক থ্রিলার, সমকালীন উপন্যাস ও কবিতার নতুন সম্ভার
           </h2>
 
@@ -318,63 +378,9 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Featured Book Highlights Banner */}
-      <section className="max-w-6xl mx-auto px-4 -mt-4 mb-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Card 1: Shimlay Sonkot */}
-          <Link
-            href="/shimlay-sonkot"
-            className="group relative bg-gradient-to-r from-emerald-900 to-emerald-950 text-white rounded-2xl p-5 shadow-md flex items-center justify-between overflow-hidden hover:shadow-xl transition"
-          >
-            <div className="space-y-1.5 max-w-[65%] z-10">
-              <span className="text-[10px] font-bold uppercase bg-amber-400 text-stone-950 px-2.5 py-0.5 rounded-full">
-                বেস্টসেলার থ্রিলার
-              </span>
-              <h3 className="text-xl font-bold font-serif-bn group-hover:text-amber-300 transition">
-                শিমলায় সংকট
-              </h3>
-              <p className="text-xs text-stone-300">লেখক: দীপক চন্দ • পাহাড়ি কুয়াশার টানটান রহস্য</p>
-              <div className="flex items-baseline gap-2 pt-1">
-                <span className="text-base font-bold font-serif-bn text-amber-300">₹২১০</span>
-                <span className="text-xs text-stone-400 line-through">₹৩৫০</span>
-                <span className="text-[10px] text-emerald-200">(৪০% ছাড়)</span>
-              </div>
-            </div>
-            <div className="flex flex-col items-end gap-2 z-10">
-              <span className="text-xs font-semibold bg-white/10 group-hover:bg-amber-400 group-hover:text-stone-950 px-3 py-2 rounded-xl transition flex items-center gap-1">
-                <span>অর্ডার করুন</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </span>
-            </div>
-          </Link>
-
-          {/* Card 2: Chad */}
-          <Link
-            href="/chad"
-            className="group relative bg-gradient-to-r from-amber-900 to-stone-900 text-white rounded-2xl p-5 shadow-md flex items-center justify-between overflow-hidden hover:shadow-xl transition"
-          >
-            <div className="space-y-1.5 max-w-[65%] z-10">
-              <span className="text-[10px] font-bold uppercase bg-amber-300 text-stone-950 px-2.5 py-0.5 rounded-full">
-                বহুল প্রতীক্ষিত উপন্যাস
-              </span>
-              <h3 className="text-xl font-bold font-serif-bn group-hover:text-amber-200 transition">
-                ছাদ
-              </h3>
-              <p className="text-xs text-stone-300">লেখিকা: ছবি ব্যানার্জী • মধ্যবিত্ত নারীর আত্মমর্যাদা</p>
-              <div className="flex items-baseline gap-2 pt-1">
-                <span className="text-base font-bold font-serif-bn text-amber-300">₹৩৬০</span>
-                <span className="text-xs text-stone-400 line-through">₹৪৫০</span>
-                <span className="text-[10px] text-amber-200">(২০% ছাড়)</span>
-              </div>
-            </div>
-            <div className="flex flex-col items-end gap-2 z-10">
-              <span className="text-xs font-semibold bg-white/10 group-hover:bg-amber-300 group-hover:text-stone-950 px-3 py-2 rounded-xl transition flex items-center gap-1">
-                <span>অর্ডার করুন</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </span>
-            </div>
-          </Link>
-        </div>
+      {/* Featured Book Highlights Slider */}
+      <section className="max-w-6xl mx-auto px-4 -mt-4 mb-6">
+        <HeroSlider slides={slides} />
       </section>
 
       {/* Main Catalog */}

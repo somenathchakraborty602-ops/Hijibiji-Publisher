@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { ShoppingBag, Shield, BookOpen } from 'lucide-react';
+import { ShoppingBag, Shield } from 'lucide-react';
 
 interface NavbarProps {
   cartCount: number;
@@ -38,42 +38,8 @@ export function Navbar({ cartCount, onOpenCart, activePath = '/' }: NavbarProps)
           </div>
         </Link>
 
-        {/* Navigation links & Actions */}
+        {/* Actions (Admin & Cart) */}
         <div className="flex items-center gap-2 sm:gap-3">
-          <nav className="hidden md:flex items-center gap-1.5 text-xs font-semibold text-stone-600 mr-2">
-            <Link
-              href="/"
-              className={`px-3 py-1.5 rounded-lg transition ${
-                activePath === '/'
-                  ? 'bg-amber-100/70 text-emerald-950 font-bold'
-                  : 'hover:bg-stone-100 hover:text-stone-900'
-              }`}
-            >
-              সব বই
-            </Link>
-            <Link
-              href="/shimlay-sonkot"
-              className={`px-3 py-1.5 rounded-lg transition flex items-center gap-1 ${
-                activePath === '/shimlay-sonkot'
-                  ? 'bg-amber-100/70 text-emerald-950 font-bold'
-                  : 'hover:bg-stone-100 hover:text-stone-900'
-              }`}
-            >
-              <BookOpen className="w-3.5 h-3.5 text-emerald-800" />
-              <span>শিমলায় সংকট</span>
-            </Link>
-            <Link
-              href="/chad"
-              className={`px-3 py-1.5 rounded-lg transition flex items-center gap-1 ${
-                activePath === '/chad'
-                  ? 'bg-amber-100/70 text-emerald-950 font-bold'
-                  : 'hover:bg-stone-100 hover:text-stone-900'
-              }`}
-            >
-              <BookOpen className="w-3.5 h-3.5 text-emerald-800" />
-              <span>ছাদ</span>
-            </Link>
-          </nav>
 
           {/* Admin link */}
           <Link
