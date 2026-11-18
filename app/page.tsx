@@ -15,6 +15,7 @@ import {
   Phone,
   CheckCircle2,
   Search,
+  Zap,
 } from 'lucide-react';
 import { Navbar } from '@/components/Navbar';
 import { CartDrawer, CartItem } from '@/components/CartDrawer';
@@ -23,7 +24,19 @@ import { PaymentSuccessModal } from '@/components/PaymentSuccessModal';
 import { PolicyModal, PolicyType } from '@/components/PolicyModal';
 import { Footer } from '@/components/Footer';
 import { HeroSlider } from '@/components/HeroSlider';
-import { supabase, Book, Coupon, INITIAL_BOOKS, BannerSlide, INITIAL_SLIDES } from '@/lib/supabase';
+import { BookStatusBadge } from '@/components/BookStatusBadge';
+import {
+  supabase,
+  Book,
+  Coupon,
+  INITIAL_BOOKS,
+  BannerSlide,
+  INITIAL_SLIDES,
+  BookFormatKey,
+  getBookFormats,
+  getDefaultAvailableFormat,
+  isPreBookingStatus,
+} from '@/lib/supabase';
 
 export default function HomePage() {
   const [books, setBooks] = useState<Book[]>(INITIAL_BOOKS);
@@ -56,6 +69,11 @@ export default function HomePage() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
+  const [selectedFormats, setSelectedFormats] = useState<Record<string, BookFormatKey>>({});
+  const [directBuyItem, setDirectBuyItem] = useState<{
+    summary: string;
+    amount: number;
+  } | null>(null);
 
   // Success modal state
   const [successModalData, setSuccessModalData] = useState<{
@@ -156,67 +174,35 @@ export default function HomePage() {
     };
   }, []);
 
-  // Check for Cashfree payment return (?order_id=...)
+  // Sync cart clearing when OrderReturnHandler confirms payment return
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const urlParams = new URLSearchParams(window.location.search);
-    const returnOrderId = urlParams.get('order_id');
-
-    if (returnOrderId) {
-      async function verifyOrder() {
-        try {
-          const { data: order } = await supabase
-            .from('orders')
-            .select('*')
-            .eq('id', returnOrderId)
-            .single();
-
-          if (order) {
-            setSuccessModalData({
-              isOpen: true,
-              orderId: order.id,
-              itemsSummary: order.order_items || 'বই সম্ভার',
-              amount: order.total_amount,
-            });
-
-            if (order.payment_status !== 'DELIVERED') {
-              await supabase
-                .from('orders')
-                .update({ payment_status: 'SUCCESS' })
-                .eq('id', returnOrderId);
-            }
-          } else {
-            setSuccessModalData({
-              isOpen: true,
-              orderId: returnOrderId || '',
-              itemsSummary: 'হিজিবিজি বই সম্ভার',
-              amount: 0,
-            });
-          }
-        } catch (e) {
-          console.warn('Payment return error check:', e);
-        }
-      }
-      verifyOrder();
-    }
+    const handleCartCleared = () => {
+      setCart([]);
+      setAppliedCoupon(null);
+    };
+    window.addEventListener('hijibiji_cart_cleared', handleCartCleared);
+    return () => {
+      window.removeEventListener('hijibiji_cart_cleared', handleCartCleared);
+    };
   }, []);
 
   // Cart operations
-  const handleAddToCart = (book: Book, format: string = 'Paperback') => {
-    const itemPrice =
-      format === 'E-Book'
-        ? Number(book.discount_ebook || book.price_ebook || book.discount_price || book.price)
-        : format === 'Hardcover'
-        ? Number(book.discount_hardcover || book.price_hardcover || book.discount_price || book.price)
-        : Number(book.discount_paperback || book.price_paperback || book.discount_price || book.price);
+  const handleAddToCart = (book: Book, formatKey?: BookFormatKey) => {
+    const formats = getBookFormats(book);
+    const targetKey = formatKey || selectedFormats[book.id] || getDefaultAvailableFormat(book);
+    const chosen = formats.find((f) => f.key === targetKey && f.isAvailable) || formats.find((f) => f.isAvailable);
+    if (!chosen || chosen.activePrice === null) return;
 
-    const cartItemId = `${book.id}-${format}`;
+    const cartItemId = `${book.id}-${chosen.bengaliName}`;
+    const isPreBooking = isPreBookingStatus(book.book_status);
 
     setCart((prev) => {
       const existing = prev.find((item) => item.id === cartItemId);
       if (existing) {
         return prev.map((item) =>
-          item.id === cartItemId ? { ...item, qty: item.qty + 1 } : item
+          item.id === cartItemId
+            ? { ...item, qty: item.qty + 1, isPreBooking }
+            : item
         );
       } else {
         return [
@@ -226,16 +212,32 @@ export default function HomePage() {
             bookId: book.id,
             title: book.title,
             author: book.author,
-            format: format,
-            price: itemPrice,
+            format: chosen.bengaliName,
+            price: chosen.activePrice!,
             image: book.cover_image_url,
             qty: 1,
+            isPreBooking,
           },
         ];
       }
     });
 
     setIsCartOpen(true);
+  };
+
+  const handleDirectBuy = (book: Book, formatKey?: BookFormatKey) => {
+    const formats = getBookFormats(book);
+    const targetKey = formatKey || selectedFormats[book.id] || getDefaultAvailableFormat(book);
+    const chosen = formats.find((f) => f.key === targetKey && f.isAvailable) || formats.find((f) => f.isAvailable);
+    if (!chosen || chosen.activePrice === null) return;
+
+    const isPreBooking = isPreBookingStatus(book.book_status);
+
+    setDirectBuyItem({
+      summary: `${book.title} (${chosen.bengaliName}) (x1)${isPreBooking ? ' [Pre-Booking]' : ''}`,
+      amount: chosen.activePrice,
+    });
+    setIsCheckoutOpen(true);
   };
 
   const handleUpdateQty = (itemId: string, delta: number) => {
@@ -462,13 +464,19 @@ export default function HomePage() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredBooks.map((book) => {
-              const displayPrice =
-                book.discount_paperback ||
-                book.discount_price ||
-                book.price_paperback ||
-                book.price;
-              const originalPrice = book.price_paperback || book.price;
-              const hasDiscount = originalPrice && displayPrice < originalPrice;
+              const formats = getBookFormats(book);
+              const activeKey = selectedFormats[book.id] || getDefaultAvailableFormat(book);
+              const currentFormat =
+                formats.find((f) => f.key === activeKey && f.isAvailable) ||
+                formats.find((f) => f.isAvailable) ||
+                formats[1];
+
+              const displayPrice = currentFormat?.activePrice ?? book.discount_price ?? book.price;
+              const originalPrice = currentFormat?.price ?? book.price;
+              const hasDiscount = Boolean(
+                currentFormat?.hasDiscount ||
+                  (originalPrice && displayPrice && displayPrice < originalPrice)
+              );
 
               // Dedicated sales landing page check
               const cleanTitle = (book.title || '').trim();
@@ -500,6 +508,13 @@ export default function HomePage() {
                         referrerPolicy="no-referrer"
                       />
                     </Link>
+
+                    {/* Top-left Book Status Badge */}
+                    <BookStatusBadge
+                      status={book.book_status}
+                      size="sm"
+                      className="absolute top-3 left-3 z-10"
+                    />
 
                     {hasDiscount && (
                       <span className="absolute top-3 right-3 bg-red-600 text-white text-[11px] font-bold px-2.5 py-1 rounded-md shadow-md">
@@ -539,39 +554,95 @@ export default function HomePage() {
                       </p>
                     </div>
 
-                    {/* Pricing & Actions */}
-                    <div className="pt-2 border-t border-stone-100">
-                      <div className="flex items-baseline justify-between mb-3">
+                    {/* 3 Formats Selector (E-Book, Paperback, Hardcover) */}
+                    <div className="space-y-2.5 pt-2 border-t border-stone-100">
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {formats.map((f) => {
+                          const isSelected = currentFormat?.key === f.key && f.isAvailable;
+                          if (!f.isAvailable) {
+                            return (
+                              <div
+                                key={f.key}
+                                className="py-1.5 px-1 rounded-xl border border-stone-200 bg-stone-100 text-stone-400 text-center cursor-not-allowed opacity-75"
+                              >
+                                <div className="text-[10px] font-bold text-stone-500 truncate">
+                                  {f.label}
+                                </div>
+                                <div className="text-xs font-bold text-stone-400">NA</div>
+                              </div>
+                            );
+                          }
+                          return (
+                            <button
+                              key={f.key}
+                              type="button"
+                              onClick={() =>
+                                setSelectedFormats((prev) => ({
+                                  ...prev,
+                                  [book.id]: f.key,
+                                }))
+                              }
+                              className={`py-1.5 px-1 rounded-xl text-center transition cursor-pointer ${
+                                isSelected
+                                  ? 'border-2 border-emerald-800 bg-emerald-50 text-emerald-950 shadow-2xs'
+                                  : 'border border-stone-200 bg-white text-stone-700 hover:border-emerald-500'
+                              }`}
+                            >
+                              <div className="text-[10px] font-bold truncate">{f.label}</div>
+                              <div className="text-xs font-bold text-emerald-900 font-serif-bn">
+                                ₹{f.activePrice}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <div className="flex items-baseline justify-between">
                         <div className="flex items-baseline gap-2">
                           <span className="text-2xl font-bold font-serif-bn text-emerald-950">
-                            ₹{displayPrice}
+                            {displayPrice ? `₹${displayPrice}` : 'NA'}
                           </span>
-                          {hasDiscount && (
+                          {hasDiscount && originalPrice && (
                             <span className="text-xs text-stone-400 line-through">
                               ₹{originalPrice}
                             </span>
                           )}
                         </div>
-                        <span className="text-[11px] text-emerald-800 font-semibold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
-                          ফ্রি ডেলিভারি
-                        </span>
+                        <Link
+                          href={salesHref}
+                          className="text-[11px] text-emerald-800 hover:underline font-semibold flex items-center gap-1"
+                        >
+                          <BookOpen className="w-3 h-3" />
+                          <span>বিস্তারিত</span>
+                        </Link>
                       </div>
 
                       <div className="grid grid-cols-2 gap-2">
-                        <Link
-                          href={salesHref}
-                          className="bg-stone-100 hover:bg-stone-200 text-stone-800 font-semibold text-xs py-2.5 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer text-center"
+                        <button
+                          type="button"
+                          onClick={() => handleDirectBuy(book, currentFormat?.key)}
+                          disabled={!currentFormat?.isAvailable}
+                          className={`${
+                            isPreBookingStatus(book.book_status)
+                              ? 'bg-indigo-700 hover:bg-indigo-800'
+                              : 'bg-emerald-800 hover:bg-emerald-900'
+                          } disabled:opacity-50 text-white font-semibold text-xs py-2.5 px-2 rounded-xl transition shadow-xs flex items-center justify-center gap-1 cursor-pointer active:scale-98`}
                         >
-                          <BookOpen className="w-3.5 h-3.5 text-stone-600" />
-                          <span>বিস্তারিত</span>
-                        </Link>
+                          <Zap className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                          <span className="truncate">
+                            {isPreBookingStatus(book.book_status)
+                              ? 'এখনই প্রি-বুকিং করুন'
+                              : 'সরাসরি কিনুন'}
+                          </span>
+                        </button>
 
                         <button
                           type="button"
-                          onClick={() => handleAddToCart(book, 'Paperback')}
-                          className="bg-emerald-800 hover:bg-emerald-900 text-white font-semibold text-xs py-2.5 rounded-xl transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer active:scale-98"
+                          onClick={() => handleAddToCart(book, currentFormat?.key)}
+                          disabled={!currentFormat?.isAvailable}
+                          className="bg-stone-100 hover:bg-stone-200 disabled:opacity-50 text-stone-800 font-semibold text-xs py-2.5 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer"
                         >
-                          <Plus className="w-3.5 h-3.5" />
+                          <Plus className="w-3.5 h-3.5 text-emerald-800" />
                           <span>থলিতে রাখুন</span>
                         </button>
                       </div>
@@ -635,6 +706,7 @@ export default function HomePage() {
         onUpdateQty={handleUpdateQty}
         onRemoveItem={handleRemoveItem}
         onOpenCheckout={() => {
+          setDirectBuyItem(null);
           setIsCartOpen(false);
           setIsCheckoutOpen(true);
         }}
@@ -646,14 +718,29 @@ export default function HomePage() {
       {/* Checkout Modal */}
       <CheckoutModal
         isOpen={isCheckoutOpen}
-        onClose={() => setIsCheckoutOpen(false)}
-        orderItemsSummary={cart
-          .map((item) => `${item.title} (${item.format}) x${item.qty}`)
-          .join(', ')}
-        totalAmount={getTotalAmount()}
+        onClose={() => {
+          setIsCheckoutOpen(false);
+          setDirectBuyItem(null);
+        }}
+        orderItemsSummary={
+          directBuyItem
+            ? directBuyItem.summary
+            : cart
+                .map(
+                  (item) =>
+                    `${item.title} (${item.format}) x${item.qty}${
+                      item.isPreBooking ? ' [Pre-Booking]' : ''
+                    }`
+                )
+                .join(', ')
+        }
+        totalAmount={directBuyItem ? directBuyItem.amount : getTotalAmount()}
         onOrderSuccess={(orderId, itemsSummary, amount) => {
-          setCart([]);
-          setAppliedCoupon(null);
+          if (!directBuyItem) {
+            setCart([]);
+            setAppliedCoupon(null);
+          }
+          setDirectBuyItem(null);
           setSuccessModalData({
             isOpen: true,
             orderId,

@@ -24,12 +24,23 @@ import {
   Search,
   MessageCircle,
   Sliders,
-  Image as ImageIcon,
   Eye,
   EyeOff,
-  Sparkles,
 } from 'lucide-react';
-import { supabase, Book, Coupon, Order, INITIAL_BOOKS, BannerSlide, INITIAL_SLIDES } from '@/lib/supabase';
+import {
+  supabase,
+  Book,
+  Coupon,
+  Order,
+  INITIAL_BOOKS,
+  BannerSlide,
+  INITIAL_SLIDES,
+  BOOK_STATUS_OPTIONS,
+  BookStatusValue,
+  normalizeBookStatus,
+  getBookFormats,
+} from '@/lib/supabase';
+import { BookStatusBadge } from '@/components/BookStatusBadge';
 
 const ADMIN_PIN = 'some@1051';
 
@@ -70,6 +81,7 @@ export default function AdminPage() {
   const [priceHardcover, setPriceHardcover] = useState('');
   const [discountHardcover, setDiscountHardcover] = useState('');
   const [bookDesc, setBookDesc] = useState('');
+  const [bookStatus, setBookStatus] = useState<BookStatusValue>('প্রকাশিত');
   const [existingCoverUrl, setExistingCoverUrl] = useState('');
   const [existingPdfUrl, setExistingPdfUrl] = useState('');
   const [coverFile, setCoverFile] = useState<File | null>(null);
@@ -98,17 +110,9 @@ export default function AdminPage() {
   const [bannersLoading, setBannersLoading] = useState(false);
   const [savingBanner, setSavingBanner] = useState(false);
 
-  // Banner Form State
-  const [editBannerId, setEditBannerId] = useState<string | null>(null);
-  const [bannerTitle, setBannerTitle] = useState('');
-  const [bannerSubtitle, setBannerSubtitle] = useState('');
-  const [bannerBadge, setBannerBadge] = useState('');
-  const [bannerImageUrl, setBannerImageUrl] = useState('');
-  const [bannerLinkUrl, setBannerLinkUrl] = useState('');
-  const [bannerButtonText, setBannerButtonText] = useState('বিস্তারিত দেখুন ও অর্ডার করুন');
-  const [bannerOrderIndex, setBannerOrderIndex] = useState('1');
-  const [bannerIsActive, setBannerIsActive] = useState(true);
+  // Banner Photo Upload State
   const [bannerImageFile, setBannerImageFile] = useState<File | null>(null);
+  const [bannerPreviewUrl, setBannerPreviewUrl] = useState<string>('');
 
   // --- Orders Logic ---
   const loadOrders = React.useCallback(async () => {
@@ -279,6 +283,9 @@ export default function AdminPage() {
   };
 
   const startEditBook = (book: Book) => {
+    const hasExplicitFormats =
+      book.price_ebook != null || book.price_paperback != null || book.price_hardcover != null;
+
     setEditBookId(book.id);
     setExistingCoverUrl(book.cover_image_url || '');
     setExistingPdfUrl(book.pdf_url || '');
@@ -288,11 +295,19 @@ export default function AdminPage() {
     setPriceEbook(book.price_ebook ? String(book.price_ebook) : '');
     setDiscountEbook(book.discount_ebook ? String(book.discount_ebook) : '');
     setPricePaperback(
-      book.price_paperback ? String(book.price_paperback) : book.price ? String(book.price) : ''
+      hasExplicitFormats
+        ? book.price_paperback
+          ? String(book.price_paperback)
+          : ''
+        : book.price
+        ? String(book.price)
+        : ''
     );
     setDiscountPaperback(
-      book.discount_paperback
-        ? String(book.discount_paperback)
+      hasExplicitFormats
+        ? book.discount_paperback
+          ? String(book.discount_paperback)
+          : ''
         : book.discount_price
         ? String(book.discount_price)
         : ''
@@ -300,6 +315,7 @@ export default function AdminPage() {
     setPriceHardcover(book.price_hardcover ? String(book.price_hardcover) : '');
     setDiscountHardcover(book.discount_hardcover ? String(book.discount_hardcover) : '');
     setBookDesc(book.description || '');
+    setBookStatus(normalizeBookStatus(book.book_status));
     setCoverFile(null);
     setPdfFile(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -319,6 +335,7 @@ export default function AdminPage() {
     setPriceHardcover('');
     setDiscountHardcover('');
     setBookDesc('');
+    setBookStatus('প্রকাশিত');
     setCoverFile(null);
     setPdfFile(null);
   };
@@ -392,6 +409,7 @@ export default function AdminPage() {
         description: bookDesc.trim(),
         cover_image_url: coverUrl || 'https://images.unsplash.com/photo-1544947950-fa07a98d237f?auto=format&fit=crop&w=600&q=80',
         pdf_url: pdfUrl || null,
+        book_status: bookStatus,
       };
 
       if (editBookId) {
@@ -467,98 +485,109 @@ export default function AdminPage() {
     }
   };
 
-  // --- Banner Slider Handlers ---
-  const resetBannerForm = () => {
-    setEditBannerId(null);
-    setBannerTitle('');
-    setBannerSubtitle('');
-    setBannerBadge('');
-    setBannerImageUrl('');
-    setBannerLinkUrl('');
-    setBannerButtonText('বিস্তারিত দেখুন ও অর্ডার করুন');
-    setBannerOrderIndex('1');
-    setBannerIsActive(true);
-    setBannerImageFile(null);
-  };
+  // --- Banner Photo Upload Helpers ---
+  const fileToCompressedDataUrl = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = document.createElement('img');
+        img.onload = () => {
+          const maxWidth = 1600;
+          const scale = img.width > maxWidth ? maxWidth / img.width : 1;
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.round(img.width * scale);
+          canvas.height = Math.round(img.height * scale);
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(String(reader.result));
+            return;
+          }
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL('image/jpeg', 0.85));
+        };
+        img.onerror = () => resolve(String(reader.result));
+        img.src = String(reader.result);
+      };
+      reader.onerror = () => reject(new Error('ছবি পড়া যায়নি।'));
+      reader.readAsDataURL(file);
+    });
 
-  const startEditBanner = (slide: BannerSlide) => {
-    setEditBannerId(slide.id);
-    setBannerTitle(slide.title);
-    setBannerSubtitle(slide.subtitle || '');
-    setBannerBadge(slide.badge || '');
-    setBannerImageUrl(slide.image_url);
-    setBannerLinkUrl(slide.link_url || '');
-    setBannerButtonText(slide.button_text || 'বিস্তারিত দেখুন ও অর্ডার করুন');
-    setBannerOrderIndex(String(slide.order_index ?? 1));
-    setBannerIsActive(slide.is_active);
-    setBannerImageFile(null);
-    window.scrollTo({ top: 350, behavior: 'smooth' });
+  const handleBannerFileChange = async (file: File | null) => {
+    setBannerImageFile(file);
+    if (!file) {
+      setBannerPreviewUrl('');
+      return;
+    }
+    try {
+      const preview = await fileToCompressedDataUrl(file);
+      setBannerPreviewUrl(preview);
+    } catch {
+      setBannerPreviewUrl('');
+    }
   };
 
   const handleSaveBanner = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!bannerImageFile) {
+      alert('দয়া করে একটি ব্যানার ফটো নির্বাচন করুন।');
+      return;
+    }
     setSavingBanner(true);
 
     try {
-      let imgUrl = bannerImageUrl;
+      let imgUrl = '';
 
-      if (bannerImageFile) {
-        const fileExt = bannerImageFile.name.split('.').pop();
-        const fileName = `banner-${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
-        const { error: upErr } = await supabase.storage
+      const fileExt = bannerImageFile.name.split('.').pop() || 'jpg';
+      const fileName = `banner-${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+      const { error: upErr } = await supabase.storage
+        .from('book-covers')
+        .upload(fileName, bannerImageFile);
+
+      if (!upErr) {
+        const { data: pubData } = supabase.storage
           .from('book-covers')
-          .upload(fileName, bannerImageFile);
-
-        if (!upErr) {
-          const { data: pubData } = supabase.storage
-            .from('book-covers')
-            .getPublicUrl(fileName);
-          imgUrl = pubData.publicUrl;
-        }
+          .getPublicUrl(fileName);
+        imgUrl = pubData.publicUrl;
+      } else {
+        imgUrl = bannerPreviewUrl || (await fileToCompressedDataUrl(bannerImageFile));
       }
 
       if (!imgUrl) {
-        alert('দয়া করে ব্যানার ছবির লিংক দিন অথবা ছবি ফাইল আপলোড করুন।');
+        alert('ব্যানার ফটো আপলোড করা যায়নি।');
         setSavingBanner(false);
         return;
       }
 
+      const nextOrder =
+        banners.reduce((max, b) => Math.max(max, b.order_index ?? 0), 0) + 1;
+
       const slidePayload: BannerSlide = {
-        id: editBannerId || `slide-${Date.now()}`,
-        title: bannerTitle.trim(),
-        subtitle: bannerSubtitle.trim(),
-        badge: bannerBadge.trim(),
+        id: `slide-${Date.now()}`,
+        title: `ব্যানার ফটো ${nextOrder}`,
         image_url: imgUrl,
-        link_url: bannerLinkUrl.trim() || '/',
-        button_text: bannerButtonText.trim() || 'বিস্তারিত দেখুন ও অর্ডার করুন',
-        order_index: Number(bannerOrderIndex) || 1,
-        is_active: bannerIsActive,
+        order_index: nextOrder,
+        is_active: true,
       };
 
-      let updatedList: BannerSlide[] = [];
-      if (editBannerId) {
-        updatedList = banners.map((b) => (b.id === editBannerId ? slidePayload : b));
-        try {
-          await supabase.from('banners').upsert(slidePayload);
-        } catch {}
-      } else {
-        updatedList = [...banners, slidePayload];
-        try {
-          await supabase.from('banners').insert(slidePayload);
-        } catch {}
-      }
+      const updatedList = [...banners, slidePayload].sort(
+        (a, b) => (a.order_index ?? 1) - (b.order_index ?? 1)
+      );
 
-      updatedList.sort((a, b) => (a.order_index ?? 1) - (b.order_index ?? 1));
+      try {
+        await supabase.from('banners').insert(slidePayload);
+      } catch {}
+
       setBanners(updatedList);
       try {
         localStorage.setItem('hijibiji_banners', JSON.stringify(updatedList));
         window.dispatchEvent(new Event('hijibiji_banners_updated'));
       } catch {}
 
-      resetBannerForm();
-      alert(editBannerId ? 'ব্যানার স্লাইড সফলভাবে আপডেট হয়েছে!' : 'নতুন ব্যানার স্লাইড তৈরি হয়েছে!');
+      setBannerImageFile(null);
+      setBannerPreviewUrl('');
+      alert('নতুন ব্যানার ফটো সফলভাবে যুক্ত হয়েছে!');
     } catch (err: any) {
-      alert('ব্যানার সংরক্ষণ করতে ত্রুটি: ' + err?.message);
+      alert('ব্যানার আপলোড করতে ত্রুটি: ' + err?.message);
     } finally {
       setSavingBanner(false);
     }
@@ -959,6 +988,23 @@ export default function AdminPage() {
                     />
                   </div>
 
+                  <div>
+                    <label className="block font-semibold mb-1 text-stone-700">
+                      Book Status / Badge (বইয়ের স্ট্যাটাস / ব্যাজ)
+                    </label>
+                    <select
+                      value={bookStatus}
+                      onChange={(e) => setBookStatus(e.target.value as BookStatusValue)}
+                      className="w-full border border-stone-300 rounded-xl p-2.5 outline-none focus:border-emerald-700 bg-white font-medium text-stone-800 cursor-pointer"
+                    >
+                      {BOOK_STATUS_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
                   {/* Format Based Pricing */}
                   <div className="p-3.5 bg-stone-50 rounded-2xl border border-stone-200 space-y-3">
                     <p className="font-bold text-stone-800 flex items-center gap-1.5">
@@ -1139,19 +1185,20 @@ export default function AdminPage() {
                 ) : (
                   <div className="space-y-3">
                     {books.map((b) => {
-                      const ebookStr =
-                        b.price_ebook && Number(b.price_ebook) > 0
-                          ? `E-Book: ₹${b.discount_ebook || b.price_ebook}`
-                          : 'E-Book: NA';
-                      const paperPrice = b.price_paperback || b.price;
-                      const paperStr =
-                        paperPrice && Number(paperPrice) > 0
-                          ? `Paperback: ₹${b.discount_paperback || b.discount_price || paperPrice}`
-                          : 'Paperback: NA';
-                      const hardStr =
-                        b.price_hardcover && Number(b.price_hardcover) > 0
-                          ? `Hardcover: ₹${b.discount_hardcover || b.price_hardcover}`
-                          : 'Hardcover: NA';
+                      const formats = getBookFormats(b);
+                      const ebookFmt = formats.find((f) => f.key === 'ebook');
+                      const paperFmt = formats.find((f) => f.key === 'paperback');
+                      const hardFmt = formats.find((f) => f.key === 'hardcover');
+
+                      const ebookStr = ebookFmt?.isAvailable
+                        ? `E-Book: ₹${ebookFmt.activePrice}`
+                        : 'E-Book: NA';
+                      const paperStr = paperFmt?.isAvailable
+                        ? `Paperback: ₹${paperFmt.activePrice}`
+                        : 'Paperback: NA';
+                      const hardStr = hardFmt?.isAvailable
+                        ? `Hardcover: ₹${hardFmt.activePrice}`
+                        : 'Hardcover: NA';
 
                       return (
                         <div
@@ -1172,10 +1219,13 @@ export default function AdminPage() {
                               />
                             </div>
                             <div className="min-w-0">
-                              <h5 className="font-bold font-serif-bn text-sm text-stone-900 truncate">
-                                {b.title}
-                              </h5>
-                              <p className="text-xs text-stone-500">{b.author}</p>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h5 className="font-bold font-serif-bn text-sm text-stone-900 truncate">
+                                  {b.title}
+                                </h5>
+                                <BookStatusBadge status={b.book_status} size="sm" />
+                              </div>
+                              <p className="text-xs text-stone-500 mt-0.5">{b.author}</p>
                               <div className="flex flex-wrap gap-1.5 mt-1 text-[10px]">
                                 <span className="bg-blue-50 text-blue-800 px-1.5 py-0.5 rounded font-medium border border-blue-100">
                                   {ebookStr}
@@ -1328,15 +1378,15 @@ export default function AdminPage() {
               <div>
                 <h3 className="text-lg font-bold font-serif-bn text-stone-900 flex items-center gap-2">
                   <Sliders className="w-5 h-5 text-emerald-800" />
-                  <span>হোমপেজ ব্যানার স্লাইডার কন্ট্রোল</span>
+                  <span>হোমপেজ ফটো ব্যানার স্লাইডার</span>
                 </h3>
                 <p className="text-xs text-stone-500 mt-0.5">
-                  হোমপেজের শীর্ষে প্রদর্শিত বই সংক্রান্ত স্লাইডারের ছবি, লেখা, অফার ব্যাজ ও লিঙ্ক নিয়ন্ত্রণ করুন
+                  হোমপেজের ব্যানার স্লাইডারে দেখানোর জন্য সম্পূর্ণ ব্যানার ফটো আপলোড করুন
                 </p>
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-xs bg-emerald-50 text-emerald-800 border border-emerald-200 px-3 py-1.5 rounded-xl font-medium">
-                  মোট স্লাইড: {banners.length} টি
+                  মোট ফটো: {banners.length} টি
                 </span>
                 <span className="text-xs bg-amber-50 text-amber-800 border border-amber-200 px-3 py-1.5 rounded-xl font-medium">
                   সক্রিয়: {banners.filter((b) => b.is_active).length} টি
@@ -1345,245 +1395,77 @@ export default function AdminPage() {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Form: Add or Edit Slide */}
+              {/* Photo-Only Upload Form */}
               <div className="bg-white p-6 rounded-3xl border border-stone-200 shadow-xs h-fit space-y-4">
                 <div className="flex items-center justify-between border-b border-stone-100 pb-2">
                   <h4 className="font-bold font-serif-bn text-base text-stone-900 flex items-center gap-2">
-                    {editBannerId ? (
-                      <>
-                        <Edit className="w-4 h-4 text-amber-600" />
-                        <span>স্লাইড এডিট করুন</span>
-                      </>
-                    ) : (
-                      <>
-                        <PlusCircle className="w-4 h-4 text-emerald-800" />
-                        <span>নতুন ব্যানার স্লাইড যোগ করুন</span>
-                      </>
-                    )}
+                    <PlusCircle className="w-4 h-4 text-emerald-800" />
+                    <span>নতুন ব্যানার ফটো আপলোড</span>
                   </h4>
-                  {editBannerId && (
-                    <button
-                      type="button"
-                      onClick={resetBannerForm}
-                      className="text-xs text-stone-500 hover:text-stone-800 underline cursor-pointer"
-                    >
-                      বাতিল
-                    </button>
-                  )}
                 </div>
 
-                {/* Quick Presets for Admin Convenience */}
-                <div className="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-3 space-y-1.5">
-                  <div className="text-[11px] font-bold text-amber-900 flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-700" />
-                    <span>ক্যাটালগ থেকে এক-ক্লিকে লোড করুন:</span>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setBannerTitle('শিমলায় সংকট — দীপক চন্দ');
-                        setBannerSubtitle('বরফঢাকা পাইনবনের রহস্য ও টানটান রোমাঞ্চ! বিশেষ ৪০% ছাড়ে এখন মাত্র ₹২১০');
-                        setBannerBadge('★ বেস্টসেলার থ্রিলার');
-                        setBannerImageUrl('https://images.unsplash.com/photo-1544947950-fa07a98d237f?auto=format&fit=crop&w=600&q=80');
-                        setBannerLinkUrl('/shimlay-sonkot');
-                        setBannerButtonText('এখনই সরাসরি অর্ডার করুন');
-                        setBannerOrderIndex('1');
-                      }}
-                      className="text-[10px] bg-white hover:bg-emerald-50 text-emerald-900 border border-emerald-300 font-medium px-2 py-1 rounded-lg transition cursor-pointer"
-                    >
-                      শিমলায় সংকট
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setBannerTitle('ছাদ — ছবি ব্যানার্জী');
-                        setBannerSubtitle('মধ্যবিত্ত নারীর আত্মমর্যাদা ও পরম আশ্রয়ের অনন্য লড়াই। বিশেষ অফার মূল্যে সরাসরি ডেলিভারি');
-                        setBannerBadge('★ বহুল প্রতীক্ষিত সামাজিক উপন্যাস');
-                        setBannerImageUrl('https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=600&q=80');
-                        setBannerLinkUrl('/chad');
-                        setBannerButtonText('বিস্তারিত দেখুন ও অর্ডার করুন');
-                        setBannerOrderIndex('2');
-                      }}
-                      className="text-[10px] bg-white hover:bg-emerald-50 text-emerald-900 border border-emerald-300 font-medium px-2 py-1 rounded-lg transition cursor-pointer"
-                    >
-                      ছাদ
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setBannerTitle('কালপুরুষের ছায়া — অরিন্দম মুখোপাধ্যায়');
-                        setBannerSubtitle('রহস্যের নতুন স্তর, একের পর এক টানটান পর্ব। বিশেষ ছাড় মূল্যে ডেলিভারি');
-                        setBannerBadge('★ নতুন আগমন');
-                        setBannerImageUrl('https://images.unsplash.com/photo-1516979187457-637abb4f9353?auto=format&fit=crop&w=600&q=80');
-                        setBannerLinkUrl('/');
-                        setBannerButtonText('বইয়ের বিবরণ দেখুন');
-                        setBannerOrderIndex('3');
-                      }}
-                      className="text-[10px] bg-white hover:bg-emerald-50 text-emerald-900 border border-emerald-300 font-medium px-2 py-1 rounded-lg transition cursor-pointer"
-                    >
-                      কালপুরুষের ছায়া
-                    </button>
-                  </div>
-                </div>
-
-                <form onSubmit={handleSaveBanner} className="space-y-3.5 text-xs">
+                <form onSubmit={handleSaveBanner} className="space-y-4 text-xs">
                   <div>
-                    <label className="block font-semibold mb-1 text-stone-700">ব্যানার শিরোনাম (Title) *</label>
-                    <input
-                      required
-                      type="text"
-                      value={bannerTitle}
-                      onChange={(e) => setBannerTitle(e.target.value)}
-                      placeholder="যেমন: শিমলায় সংকট — দীপক চন্দ"
-                      className="w-full border border-stone-300 rounded-xl p-2.5 outline-none focus:border-emerald-700 font-medium"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block font-semibold mb-1 text-stone-700">উপশিরোনাম / বই পরিচিতি (Subtitle)</label>
-                    <textarea
-                      rows={2}
-                      value={bannerSubtitle}
-                      onChange={(e) => setBannerSubtitle(e.target.value)}
-                      placeholder="যেমন: বরফঢাকা পাইনবনের রহস্য ও রোমাঞ্চ! বিশেষ ৪০% ছাড়ে এখন মাত্র ₹২১০"
-                      className="w-full border border-stone-300 rounded-xl p-2.5 outline-none focus:border-emerald-700"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block font-semibold mb-1 text-stone-700">হাইলাইট ব্যাজ (Badge)</label>
+                    <label className="block font-semibold mb-1.5 text-stone-700">
+                      ব্যানার ফটো নির্বাচন করুন *
+                    </label>
+                    <div className="border-2 border-dashed border-stone-300 rounded-2xl p-6 text-center bg-stone-50 hover:bg-stone-100 transition cursor-pointer relative">
                       <input
-                        type="text"
-                        value={bannerBadge}
-                        onChange={(e) => setBannerBadge(e.target.value)}
-                        placeholder="যেমন: ★ বেস্টসেলার থ্রিলার"
-                        className="w-full border border-stone-300 rounded-xl p-2.5 outline-none focus:border-emerald-700"
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => handleBannerFileChange(e.target.files?.[0] || null)}
+                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
                       />
-                    </div>
-                    <div>
-                      <label className="block font-semibold mb-1 text-stone-700">ক্রম নম্বর (Order)</label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={bannerOrderIndex}
-                        onChange={(e) => setBannerOrderIndex(e.target.value)}
-                        placeholder="1"
-                        className="w-full border border-stone-300 rounded-xl p-2.5 outline-none focus:border-emerald-700"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block font-semibold mb-1 text-stone-700">ছবি আপলোড অথবা ছবির URL *</label>
-                    <div className="space-y-2">
-                      <div className="border border-dashed border-stone-300 rounded-xl p-3 text-center bg-stone-50 hover:bg-stone-100 transition cursor-pointer relative">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => setBannerImageFile(e.target.files?.[0] || null)}
-                          className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                        />
-                        <div className="flex flex-col items-center justify-center gap-1 text-stone-600">
-                          <UploadCloud className="w-5 h-5 text-emerald-800" />
-                          <span className="text-[11px] font-medium">
-                            {bannerImageFile ? bannerImageFile.name : 'কম্পিউটার/মোবাইল থেকে ছবি বেছে নিন'}
-                          </span>
-                        </div>
+                      <div className="flex flex-col items-center justify-center gap-2 text-stone-600">
+                        <UploadCloud className="w-7 h-7 text-emerald-800" />
+                        <span className="text-xs font-semibold text-stone-800">
+                          {bannerImageFile
+                            ? bannerImageFile.name
+                            : 'কম্পিউটার বা মোবাইল থেকে ব্যানার ফটো আপলোড করুন'}
+                        </span>
+                        <span className="text-[11px] text-stone-400">
+                          JPG, PNG বা WebP ফরম্যাট সাপোর্টেড
+                        </span>
                       </div>
-
-                      <div className="text-center text-[10px] text-stone-400">— অথবা ছবির সরাসরি লিংক দিন —</div>
-
-                      <input
-                        type="url"
-                        value={bannerImageUrl}
-                        onChange={(e) => setBannerImageUrl(e.target.value)}
-                        placeholder="https://images.unsplash.com/..."
-                        className="w-full border border-stone-300 rounded-xl p-2.5 outline-none focus:border-emerald-700 text-xs"
-                      />
                     </div>
 
-                    {(bannerImageUrl || bannerImageFile) && (
-                      <div className="mt-2 relative h-36 w-full rounded-xl overflow-hidden border border-stone-300 bg-stone-900 flex items-center justify-center">
-                        {bannerImageUrl ? (
-                          /* eslint-disable-next-line @next/next/no-img-element */
-                          <img
-                            src={bannerImageUrl}
-                            alt="সরাসরি প্রিভিউ"
-                            className="max-h-full max-w-full object-contain"
-                            referrerPolicy="no-referrer"
-                          />
-                        ) : (
-                          <div className="flex items-center justify-center h-full text-stone-300 text-xs">
-                            ফাইল আপলোডের জন্য প্রস্তুত: {bannerImageFile?.name}
-                          </div>
-                        )}
+                    {bannerPreviewUrl && (
+                      <div className="mt-3 relative h-40 w-full rounded-2xl overflow-hidden border border-stone-300 bg-stone-900">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={bannerPreviewUrl}
+                          alt="ব্যানার প্রিভিউ"
+                          className="w-full h-full object-cover object-center"
+                        />
                       </div>
                     )}
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block font-semibold mb-1 text-stone-700">ক্লিক করলে যাবে (Link URL)</label>
-                      <input
-                        type="text"
-                        value={bannerLinkUrl}
-                        onChange={(e) => setBannerLinkUrl(e.target.value)}
-                        placeholder="/shimlay-sonkot"
-                        className="w-full border border-stone-300 rounded-xl p-2.5 outline-none focus:border-emerald-700"
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-semibold mb-1 text-stone-700">বাটন টেক্সট</label>
-                      <input
-                        type="text"
-                        value={bannerButtonText}
-                        onChange={(e) => setBannerButtonText(e.target.value)}
-                        placeholder="বিস্তারিত দেখুন"
-                        className="w-full border border-stone-300 rounded-xl p-2.5 outline-none focus:border-emerald-700"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 pt-1">
-                    <input
-                      type="checkbox"
-                      id="bannerIsActive"
-                      checked={bannerIsActive}
-                      onChange={(e) => setBannerIsActive(e.target.checked)}
-                      className="w-4 h-4 rounded text-emerald-800 focus:ring-emerald-700 cursor-pointer"
-                    />
-                    <label htmlFor="bannerIsActive" className="text-stone-700 font-semibold cursor-pointer">
-                      হোমপেজে স্লাইডটি সক্রিয় (Active) রাখুন
-                    </label>
                   </div>
 
                   <button
                     type="submit"
-                    disabled={savingBanner}
+                    disabled={savingBanner || !bannerImageFile}
                     className="w-full bg-emerald-800 hover:bg-emerald-900 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition shadow-md cursor-pointer flex items-center justify-center gap-2"
                   >
                     {savingBanner ? (
                       <>
                         <RotateCw className="w-4 h-4 animate-spin" />
-                        <span>সংরক্ষণ হচ্ছে...</span>
+                        <span>আপলোড হচ্ছে...</span>
                       </>
                     ) : (
                       <>
                         <Check className="w-4 h-4" />
-                        <span>{editBannerId ? 'স্লাইড আপডেট করুন' : 'স্লাইড প্রকাশ করুন'}</span>
+                        <span>ব্যানার ফটো আপলোড করুন</span>
                       </>
                     )}
                   </button>
                 </form>
               </div>
 
-              {/* Banners List */}
+              {/* Uploaded Banner Photos List */}
               <div className="lg:col-span-2 space-y-4">
                 <div className="flex items-center justify-between">
                   <h4 className="font-bold font-serif-bn text-base text-stone-900">
-                    বর্তমান ব্যানার স্লাইড তালিকা ({banners.length})
+                    আপলোডকৃত ব্যানার ফটোসমূহ ({banners.length})
                   </h4>
                   <button
                     onClick={loadBanners}
@@ -1599,99 +1481,63 @@ export default function AdminPage() {
                   <p className="text-xs text-stone-400">ব্যানার লোড হচ্ছে...</p>
                 ) : banners.length === 0 ? (
                   <div className="bg-white p-8 rounded-3xl border border-stone-200 text-center space-y-2">
-                    <p className="text-sm font-semibold text-stone-700">কোনো ব্যানার স্লাইড নেই!</p>
-                    <p className="text-xs text-stone-500">বামে ফর্ম থেকে নতুন ব্যানার স্লাইড তৈরি করুন।</p>
+                    <p className="text-sm font-semibold text-stone-700">কোনো ব্যানার ফটো নেই!</p>
+                    <p className="text-xs text-stone-500">বামের ফর্ম থেকে নতুন ব্যানার ফটো আপলোড করুন।</p>
                   </div>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {banners.map((slide, idx) => (
                       <div
                         key={slide.id || idx}
-                        className={`bg-white rounded-2xl border transition shadow-2xs overflow-hidden flex flex-col sm:flex-row items-stretch sm:items-center justify-between p-4 gap-4 ${
+                        className={`bg-white rounded-2xl border transition shadow-2xs overflow-hidden flex flex-col justify-between ${
                           slide.is_active ? 'border-stone-200 hover:border-emerald-300' : 'border-stone-200 bg-stone-50/70 opacity-70'
                         }`}
                       >
-                        {/* Slide Thumbnail */}
-                        <div className="relative w-full sm:w-36 h-28 sm:h-24 rounded-xl overflow-hidden bg-stone-900 shrink-0 border border-stone-200 flex items-center justify-center">
+                        <div className="relative w-full h-36 bg-stone-900 overflow-hidden">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={slide.image_url}
-                            alt={slide.title}
+                            alt={`ব্যানার ${idx + 1}`}
                             className="w-full h-full object-cover object-center"
                             referrerPolicy="no-referrer"
                           />
-                          <div className="absolute top-1.5 left-1.5 bg-stone-900/80 text-white text-[10px] font-mono px-2 py-0.5 rounded-md">
-                            #{slide.order_index ?? idx + 1}
+                          <div className="absolute top-2 left-2 bg-stone-900/80 text-white text-[10px] font-mono px-2 py-0.5 rounded-md">
+                            #{idx + 1}
                           </div>
+                          <span
+                            className={`absolute top-2 right-2 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                              slide.is_active
+                                ? 'bg-emerald-600 text-white'
+                                : 'bg-stone-700 text-stone-200'
+                            }`}
+                          >
+                            {slide.is_active ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+                            <span>{slide.is_active ? 'সক্রিয়' : 'বন্ধ'}</span>
+                          </span>
                         </div>
 
-                        {/* Slide Details */}
-                        <div className="flex-1 min-w-0 space-y-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            {slide.badge && (
-                              <span className="text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-200 px-2 py-0.5 rounded-full">
-                                {slide.badge}
-                              </span>
-                            )}
-                            <span
-                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${
-                                slide.is_active
-                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                                  : 'bg-stone-200 text-stone-600'
-                              }`}
-                            >
-                              {slide.is_active ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
-                              <span>{slide.is_active ? 'সক্রিয়' : 'নিষ্ক্রিয়'}</span>
-                            </span>
-                          </div>
-
-                          <h5 className="font-bold text-sm sm:text-base font-serif-bn text-stone-900 truncate">
-                            {slide.title}
-                          </h5>
-
-                          {slide.subtitle && (
-                            <p className="text-xs text-stone-500 line-clamp-1">{slide.subtitle}</p>
-                          )}
-
-                          <div className="text-[11px] text-stone-400 flex items-center gap-2 pt-0.5">
-                            <span>লিঙ্ক: <strong className="text-stone-700">{slide.link_url || '/'}</strong></span>
-                            <span>•</span>
-                            <span>বাটন: <strong className="text-stone-700">{slide.button_text}</strong></span>
-                          </div>
-                        </div>
-
-                        {/* Action Buttons */}
-                        <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                        <div className="p-3 flex items-center justify-between gap-2 bg-white border-t border-stone-100">
                           <button
                             onClick={() => handleToggleBannerActive(slide.id)}
                             type="button"
-                            className={`text-xs px-2.5 py-1.5 rounded-xl font-medium transition cursor-pointer flex items-center gap-1 border ${
+                            className={`flex-1 text-xs px-3 py-1.5 rounded-xl font-medium transition cursor-pointer flex items-center justify-center gap-1.5 border ${
                               slide.is_active
                                 ? 'bg-stone-100 text-stone-700 hover:bg-stone-200 border-stone-200'
                                 : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border-emerald-200'
                             }`}
-                            title={slide.is_active ? 'নিষ্ক্রিয় করুন' : 'সক্রিয় করুন'}
                           >
                             {slide.is_active ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                            <span>{slide.is_active ? 'বন্ধ করুন' : 'চালু করুন'}</span>
-                          </button>
-
-                          <button
-                            onClick={() => startEditBanner(slide)}
-                            type="button"
-                            className="text-xs text-amber-700 hover:bg-amber-50 border border-amber-200 p-2 rounded-xl font-medium transition cursor-pointer"
-                            title="এডিট করুন"
-                          >
-                            <Edit className="w-3.5 h-3.5" />
+                            <span>{slide.is_active ? 'লুকান' : 'দেখান'}</span>
                           </button>
 
                           <button
                             onClick={() => handleDeleteBanner(slide.id)}
                             type="button"
-                            className="text-xs text-red-600 hover:bg-red-50 border border-red-200 p-2 rounded-xl font-medium transition cursor-pointer"
+                            className="text-xs text-red-600 hover:bg-red-50 border border-red-200 px-3 py-1.5 rounded-xl font-medium transition cursor-pointer flex items-center gap-1"
                             title="মুছে ফেলুন"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
+                            <span>মুছুন</span>
                           </button>
                         </div>
                       </div>

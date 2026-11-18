@@ -14,6 +14,7 @@ export interface CartItem {
   price: number;
   image?: string | null;
   qty: number;
+  isPreBooking?: boolean;
 }
 
 interface CartDrawerProps {
@@ -143,10 +144,15 @@ export function CartDrawer({
                     <h5 className="text-sm font-bold font-serif-bn text-stone-900 truncate">
                       {item.title}
                     </h5>
-                    <div className="flex items-center gap-2 mt-0.5">
+                    <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
                       <span className="text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 px-1.5 py-0.2 rounded">
                         {item.format}
                       </span>
+                      {item.isPreBooking && (
+                        <span className="text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 px-1.5 py-0.2 rounded">
+                          Pre-Booking
+                        </span>
+                      )}
                       <span className="text-xs font-semibold text-emerald-950">
                         ₹{item.price}
                       </span>

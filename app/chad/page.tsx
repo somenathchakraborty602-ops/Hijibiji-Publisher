@@ -21,13 +21,23 @@ import { CheckoutModal } from '@/components/CheckoutModal';
 import { PaymentSuccessModal } from '@/components/PaymentSuccessModal';
 import { PolicyModal, PolicyType } from '@/components/PolicyModal';
 import { Footer } from '@/components/Footer';
-import { supabase, Book, Coupon, INITIAL_BOOKS } from '@/lib/supabase';
+import { BookStatusBadge } from '@/components/BookStatusBadge';
+import {
+  supabase,
+  Book,
+  Coupon,
+  INITIAL_BOOKS,
+  BookFormatKey,
+  getBookFormats,
+  getDefaultAvailableFormat,
+  isPreBookingStatus,
+} from '@/lib/supabase';
 
 const DEFAULT_CHAD = INITIAL_BOOKS.find((b) => b.id.includes('chad'))!;
 
 export default function ChadPage() {
   const [book, setBook] = useState<Book>(DEFAULT_CHAD);
-  const [selectedFormat, setSelectedFormat] = useState<'paperback' | 'ebook' | 'hardcover'>('paperback');
+  const [selectedFormat, setSelectedFormat] = useState<BookFormatKey>('paperback');
   const [couponCode, setCouponCode] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
   const [couponMsg, setCouponMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -44,6 +54,7 @@ export default function ChadPage() {
   });
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [checkoutSource, setCheckoutSource] = useState<'direct' | 'cart'>('direct');
   const [activePolicy, setActivePolicy] = useState<PolicyType>(null);
   const [pdfModalOpen, setPdfModalOpen] = useState(false);
 
@@ -66,6 +77,15 @@ export default function ChadPage() {
     } catch {}
   }, [cart]);
 
+  useEffect(() => {
+    const handleCartCleared = () => {
+      setCart([]);
+      setAppliedCoupon(null);
+    };
+    window.addEventListener('hijibiji_cart_cleared', handleCartCleared);
+    return () => window.removeEventListener('hijibiji_cart_cleared', handleCartCleared);
+  }, []);
+
   // Fetch book from Supabase
   useEffect(() => {
     async function loadBook() {
@@ -77,10 +97,12 @@ export default function ChadPage() {
           .single();
 
         if (data) {
-          setBook({
+          const merged = {
             ...DEFAULT_CHAD,
             ...data,
-          });
+          };
+          setBook(merged);
+          setSelectedFormat(getDefaultAvailableFormat(merged));
         }
       } catch (e) {
         console.warn('Supabase book fetch fallback:', e);
@@ -89,35 +111,16 @@ export default function ChadPage() {
     loadBook();
   }, []);
 
-  // Format pricing
-  const formats = [
-    {
-      key: 'ebook',
-      label: 'E-Book (ডিজিটাল)',
-      price: book.price_ebook,
-      discount: book.discount_ebook,
-    },
-    {
-      key: 'paperback',
-      label: 'Paperback (কাগজের বই)',
-      price: book.price_paperback || book.price,
-      discount: book.discount_paperback || book.discount_price,
-    },
-    {
-      key: 'hardcover',
-      label: 'Hardcover (অভিজাত বাঁধাই)',
-      price: book.price_hardcover,
-      discount: book.discount_hardcover,
-    },
-  ];
+  // Format pricing (E-Book, Paperback, Hardcover - NA when missing/null)
+  const formats = getBookFormats(book);
 
-  const currentFormatObj = formats.find((f) => f.key === selectedFormat) || formats[1];
-  const mrp = currentFormatObj.price || 450;
-  const activePrice =
-    currentFormatObj.discount && currentFormatObj.discount < mrp
-      ? Number(currentFormatObj.discount)
-      : Number(mrp);
-  const hasDiscount = currentFormatObj.discount && currentFormatObj.discount < mrp;
+  const currentFormatObj =
+    formats.find((f) => f.key === selectedFormat && f.isAvailable) ||
+    formats.find((f) => f.isAvailable) ||
+    formats[1];
+  const mrp = currentFormatObj.price || book.price || 450;
+  const activePrice = currentFormatObj.activePrice ?? Number(mrp);
+  const hasDiscount = currentFormatObj.hasDiscount;
 
   // Coupon calculations
   let couponDiscount = 0;
@@ -181,7 +184,11 @@ export default function ChadPage() {
       ? 'Hardcover'
       : 'Paperback';
 
-  const orderSummaryString = `${book.title} (${formatBengaliName}) (x1)`;
+  const isPreBooking = isPreBookingStatus(book.book_status);
+
+  const orderSummaryString = `${book.title} (${formatBengaliName}) (x1)${
+    isPreBooking ? ' [Pre-Booking]' : ''
+  }`;
 
   const handleAddToCart = () => {
     const cartItemId = `${book.id}-${formatBengaliName}`;
@@ -189,7 +196,7 @@ export default function ChadPage() {
       const existing = prev.find((item) => item.id === cartItemId);
       if (existing) {
         return prev.map((item) =>
-          item.id === cartItemId ? { ...item, qty: item.qty + 1 } : item
+          item.id === cartItemId ? { ...item, qty: item.qty + 1, isPreBooking } : item
         );
       }
       return [
@@ -203,11 +210,21 @@ export default function ChadPage() {
           price: finalPayable,
           image: book.cover_image_url,
           qty: 1,
+          isPreBooking,
         },
       ];
     });
     setIsCartOpen(true);
   };
+
+  const cartSubtotal = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
+  const cartDiscount =
+    appliedCoupon && cartSubtotal >= (appliedCoupon.min_order_value || 0)
+      ? appliedCoupon.discount_type === 'percentage' || !appliedCoupon.discount_type
+        ? Math.round((cartSubtotal * appliedCoupon.discount_value) / 100)
+        : Math.min(cartSubtotal, appliedCoupon.discount_value)
+      : 0;
+  const cartTotalPayable = Math.max(0, cartSubtotal - cartDiscount);
 
   return (
     <>
@@ -237,9 +254,10 @@ export default function ChadPage() {
           {/* Left: Book Cover & Badges */}
           <div className="space-y-4">
             <div className="relative bg-white rounded-3xl p-6 sm:p-8 shadow-xl border border-stone-200/80 overflow-hidden group">
-              <div className="absolute top-4 left-4 bg-emerald-800 text-amber-300 text-xs font-bold px-3 py-1.5 rounded-full shadow-md z-10">
-                ★ বহুল প্রতীক্ষিত সামাজিক উপন্যাস
-              </div>
+              <BookStatusBadge
+                status={book.book_status}
+                className="absolute top-4 left-4 z-10"
+              />
               <div className="relative h-[420px] w-full">
                 <Image
                   src={
@@ -297,18 +315,15 @@ export default function ChadPage() {
               </label>
               <div className="grid grid-cols-3 gap-2.5">
                 {formats.map((f) => {
-                  const isAvailable = f.price !== null && f.price !== undefined && Number(f.price) > 0;
-                  const isSelected = selectedFormat === f.key;
-                  const currentDisplay =
-                    f.discount && f.price && f.discount < f.price ? f.discount : (f.price ?? 0);
+                  const isSelected = currentFormatObj.key === f.key && f.isAvailable;
 
-                  if (!isAvailable) {
+                  if (!f.isAvailable) {
                     return (
                       <div
                         key={f.key}
                         className="p-3 rounded-xl border border-stone-200 bg-stone-100 text-stone-400 opacity-60 text-center cursor-not-allowed"
                       >
-                        <div className="text-[11px] font-bold text-stone-500">{f.label.split(' ')[0]}</div>
+                        <div className="text-[11px] font-bold text-stone-500">{f.label}</div>
                         <div className="text-xs font-bold mt-0.5 text-stone-400">NA</div>
                       </div>
                     );
@@ -318,16 +333,16 @@ export default function ChadPage() {
                     <button
                       key={f.key}
                       type="button"
-                      onClick={() => setSelectedFormat(f.key as any)}
+                      onClick={() => setSelectedFormat(f.key)}
                       className={`p-3 rounded-2xl text-center transition cursor-pointer ${
                         isSelected
                           ? 'border-2 border-emerald-800 bg-emerald-50 text-emerald-950 shadow-xs'
                           : 'border border-stone-300 bg-white text-stone-700 hover:border-emerald-600'
                       }`}
                     >
-                      <div className="text-[11px] font-bold truncate">{f.label.split(' ')[0]}</div>
+                      <div className="text-[11px] font-bold truncate">{f.label}</div>
                       <div className="text-sm font-bold text-emerald-950 mt-0.5 font-serif-bn">
-                        ₹{currentDisplay}
+                        ₹{f.activePrice}
                       </div>
                     </button>
                   );
@@ -429,11 +444,18 @@ export default function ChadPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <button
                   type="button"
-                  onClick={() => setIsCheckoutOpen(true)}
-                  className="w-full bg-emerald-800 hover:bg-emerald-900 text-white font-bold py-3.5 rounded-2xl transition shadow-lg flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                  onClick={() => {
+                    setCheckoutSource('direct');
+                    setIsCheckoutOpen(true);
+                  }}
+                  className={`w-full ${
+                    isPreBooking
+                      ? 'bg-indigo-700 hover:bg-indigo-800'
+                      : 'bg-emerald-800 hover:bg-emerald-900'
+                  } text-white font-bold py-3.5 rounded-2xl transition shadow-lg flex items-center justify-center gap-2 cursor-pointer active:scale-98`}
                 >
                   <Zap className="w-4 h-4 text-amber-300" />
-                  <span>এখনই সরাসরি কিনুন</span>
+                  <span>{isPreBooking ? 'এখনই প্রি-বুকিং করুন' : 'এখনই সরাসরি কিনুন'}</span>
                 </button>
 
                 <button
@@ -489,6 +511,7 @@ export default function ChadPage() {
         onRemoveItem={(id) => setCart((prev) => prev.filter((i) => i.id !== id))}
         onOpenCheckout={() => {
           setIsCartOpen(false);
+          setCheckoutSource('cart');
           setIsCheckoutOpen(true);
         }}
         appliedCoupon={appliedCoupon}
@@ -504,8 +527,21 @@ export default function ChadPage() {
       <CheckoutModal
         isOpen={isCheckoutOpen}
         onClose={() => setIsCheckoutOpen(false)}
-        orderItemsSummary={orderSummaryString}
-        totalAmount={finalPayable}
+        orderItemsSummary={
+          checkoutSource === 'cart' && cart.length > 0
+            ? cart
+                .map(
+                  (item) =>
+                    `${item.title} (${item.format}) x${item.qty}${
+                      item.isPreBooking ? ' [Pre-Booking]' : ''
+                    }`
+                )
+                .join(', ')
+            : orderSummaryString
+        }
+        totalAmount={
+          checkoutSource === 'cart' && cart.length > 0 ? cartTotalPayable : finalPayable
+        }
         onOrderSuccess={(orderId, itemsSummary, amount) => {
           setSuccessModalData({
             isOpen: true,

@@ -9,6 +9,34 @@ export const SUPABASE_ANON_KEY =
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+export type BookStatusValue =
+  | 'প্রকাশিত'
+  | 'বেস্ট সেলার'
+  | 'রিডার্স চয়েস'
+  | 'প্রি-বুকিং';
+
+export const BOOK_STATUS_OPTIONS: Array<{
+  value: BookStatusValue;
+  label: string;
+}> = [
+  { value: 'প্রকাশিত', label: 'প্রকাশিত (Published)' },
+  { value: 'বেস্ট সেলার', label: 'বেস্ট সেলার (Bestseller)' },
+  { value: 'রিডার্স চয়েস', label: "রিডার্স চয়েস (Reader's Choice)" },
+  { value: 'প্রি-বুকিং', label: 'প্রি-বুকিং (Pre-Booking)' },
+];
+
+export function normalizeBookStatus(status?: string | null): BookStatusValue {
+  const s = (status || '').trim().normalize('NFC');
+  if (s === 'বেস্ট সেলার') return 'বেস্ট সেলার';
+  if (s === 'রিডার্স চয়েস' || s === 'রিডার্স চয়েস') return 'রিডার্স চয়েস';
+  if (s === 'প্রি-বুকিং') return 'প্রি-বুকিং';
+  return 'প্রকাশিত';
+}
+
+export function isPreBookingStatus(status?: string | null): boolean {
+  return normalizeBookStatus(status) === 'প্রি-বুকিং';
+}
+
 export interface Book {
   id: string;
   title: string;
@@ -25,9 +53,97 @@ export interface Book {
   description?: string | null;
   cover_image_url?: string | null;
   pdf_url?: string | null;
+  book_status?: string | null;
   created_at?: string;
   slug?: string;
   genre?: string;
+}
+
+export type BookFormatKey = 'ebook' | 'paperback' | 'hardcover';
+
+export interface BookFormatOption {
+  key: BookFormatKey;
+  label: string;
+  bengaliName: 'E-Book' | 'Paperback' | 'Hardcover';
+  price: number | null;
+  discount: number | null;
+  activePrice: number | null;
+  hasDiscount: boolean;
+  isAvailable: boolean;
+}
+
+export function getBookFormats(book: Book): BookFormatOption[] {
+  const hasExplicitFormats =
+    book.price_ebook != null || book.price_paperback != null || book.price_hardcover != null;
+
+  const rawPaperbackPrice = hasExplicitFormats
+    ? book.price_paperback ?? null
+    : book.price ?? null;
+  const rawPaperbackDiscount = hasExplicitFormats
+    ? book.discount_paperback ?? null
+    : book.discount_price ?? null;
+
+  const entries: Array<{
+    key: BookFormatKey;
+    label: string;
+    bengaliName: 'E-Book' | 'Paperback' | 'Hardcover';
+    price: number | null | undefined;
+    discount: number | null | undefined;
+  }> = [
+    {
+      key: 'ebook',
+      label: 'E-Book',
+      bengaliName: 'E-Book',
+      price: book.price_ebook,
+      discount: book.discount_ebook,
+    },
+    {
+      key: 'paperback',
+      label: 'Paperback',
+      bengaliName: 'Paperback',
+      price: rawPaperbackPrice,
+      discount: rawPaperbackDiscount,
+    },
+    {
+      key: 'hardcover',
+      label: 'Hardcover',
+      bengaliName: 'Hardcover',
+      price: book.price_hardcover,
+      discount: book.discount_hardcover,
+    },
+  ];
+
+  return entries.map((f) => {
+    const numPrice =
+      f.price !== null && f.price !== undefined && Number(f.price) > 0
+        ? Number(f.price)
+        : null;
+    const numDiscount =
+      f.discount !== null && f.discount !== undefined && Number(f.discount) > 0
+        ? Number(f.discount)
+        : null;
+    const hasDiscount = Boolean(numPrice && numDiscount && numDiscount < numPrice);
+    const activePrice = numPrice ? (hasDiscount ? numDiscount! : numPrice) : null;
+
+    return {
+      key: f.key,
+      label: f.label,
+      bengaliName: f.bengaliName,
+      price: numPrice,
+      discount: numDiscount,
+      activePrice,
+      hasDiscount,
+      isAvailable: numPrice !== null,
+    };
+  });
+}
+
+export function getDefaultAvailableFormat(book: Book): BookFormatKey {
+  const formats = getBookFormats(book);
+  const paperback = formats.find((f) => f.key === 'paperback' && f.isAvailable);
+  if (paperback) return 'paperback';
+  const firstAvailable = formats.find((f) => f.isAvailable);
+  return firstAvailable ? firstAvailable.key : 'paperback';
 }
 
 export interface Coupon {

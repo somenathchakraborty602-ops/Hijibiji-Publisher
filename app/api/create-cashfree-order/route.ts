@@ -37,14 +37,17 @@ export async function POST(request: NextRequest) {
         }),
       });
 
-      if (edgeResponse.ok) {
-        edgeData = await edgeResponse.json();
-        if (edgeData && (edgeData.payment_session_id || edgeData.paymentSessionId)) {
-          edgeSuccess = true;
-        }
+      const rawText = await edgeResponse.text();
+      try {
+        edgeData = rawText ? JSON.parse(rawText) : null;
+      } catch {
+        edgeData = { raw: rawText };
+      }
+
+      if (edgeResponse.ok && edgeData && (edgeData.payment_session_id || edgeData.paymentSessionId)) {
+        edgeSuccess = true;
       } else {
-        const errText = await edgeResponse.text();
-        console.warn('Supabase Edge function responded with status:', edgeResponse.status, errText);
+        console.warn('Supabase Edge function responded with status:', edgeResponse.status, rawText);
       }
     } catch (edgeErr: any) {
       console.warn('Could not reach Supabase Edge Function directly:', edgeErr?.message);

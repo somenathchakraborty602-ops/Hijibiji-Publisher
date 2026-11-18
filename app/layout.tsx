@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Script from 'next/script';
 import { Hind_Siliguri, Noto_Serif_Bengali } from 'next/font/google';
+import { OrderReturnHandler } from '@/components/OrderReturnHandler';
 import './globals.css';
 
 const hindSiliguri = Hind_Siliguri({
@@ -73,6 +74,7 @@ export default function RootLayout({
           src="https://sdk.cashfree.com/js/v3/cashfree.js"
           strategy="afterInteractive"
         />
+        <OrderReturnHandler />
         {children}
       </body>
     </html>
