@@ -169,55 +169,43 @@ export interface Order {
 
 export interface BannerSlide {
   id: string;
-  title: string;
-  subtitle?: string;
   image_url: string;
-  link_url?: string;
-  badge?: string;
-  button_text?: string;
+  link_url?: string | null;
+  sort_order: number;
   is_active: boolean;
-  order_index?: number;
   created_at?: string;
 }
 
-export const INITIAL_SLIDES: BannerSlide[] = [
-  {
-    id: 'slide-shimlay',
-    title: 'শিমলায় সংকট',
-    subtitle: 'লেখক: দীপক চন্দ • বরফঢাকা পাইনবনের রহস্য ও রোমাঞ্চ! বিশেষ ৪০% ছাড়ে এখন মাত্র ₹২১০',
-    badge: '★ বেস্টসেলার রহস্য উপন্যাস',
-    image_url:
-      'https://images.unsplash.com/photo-1544947950-fa07a98d237f?auto=format&fit=crop&w=1200&q=80',
-    link_url: '/shimlay-sonkot',
-    button_text: 'এখনই সরাসরি অর্ডার করুন',
-    is_active: true,
-    order_index: 1,
-  },
-  {
-    id: 'slide-chad',
-    title: 'ছাদ — ছবি ব্যানার্জী',
-    subtitle: 'মধ্যবিত্ত নারীর আত্মমর্যাদা ও পরম আশ্রয়ের অনন্য লড়াই। বিশেষ অফার মূল্যে সরাসরি ডেলিভারি',
-    badge: '★ বহুল প্রতীক্ষিত সামাজিক উপন্যাস',
-    image_url:
-      'https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=1200&q=80',
-    link_url: '/chad',
-    button_text: 'বিস্তারিত দেখুন ও অর্ডার করুন',
-    is_active: true,
-    order_index: 2,
-  },
-  {
-    id: 'slide-offer',
-    title: 'কুপন ছাড় ও ফ্রি হোম ডেলিভারি',
-    subtitle: 'কুপন কোড HIJIBIJIPRE প্রয়োগ করলেই পান অতিরিক্ত ৪০% পর্যন্ত ছাড়! সরাসরি কোলকাতা থেকে সারা ভারতে দ্রুততম হোম ডেলিভারি।',
-    badge: '★ সীমিত সময়ের বিশেষ সুযোগ',
-    image_url:
-      'https://images.unsplash.com/photo-1476275466078-4007374efbbe?auto=format&fit=crop&w=1200&q=80',
-    link_url: '/',
-    button_text: 'বইয়ের সম্ভার দেখুন',
-    is_active: true,
-    order_index: 3,
-  },
-];
+export function extractStoragePathFromUrl(
+  url?: string | null
+): { bucket: string; path: string } | null {
+  if (!url) return null;
+  const match = url.match(/\/storage\/v1\/object\/public\/([^/]+)\/(.+)$/);
+  if (!match) return null;
+  return { bucket: match[1], path: decodeURIComponent(match[2]) };
+}
+
+export async function fetchBannerSlides(limit = 3): Promise<BannerSlide[]> {
+  try {
+    const { data, error } = await supabase
+      .from('banners')
+      .select('*')
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      console.warn('Could not fetch banners from Supabase:', error.message);
+      return [];
+    }
+
+    return (data || []) as BannerSlide[];
+  } catch (err) {
+    console.warn('Could not fetch banners from Supabase:', err);
+    return [];
+  }
+}
 
 // Default initial books for immediate high-fidelity rendering if DB is loading
 export const INITIAL_BOOKS: Book[] = [
