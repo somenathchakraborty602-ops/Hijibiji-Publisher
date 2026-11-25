@@ -82,9 +82,15 @@ export default function AdminPage() {
   const [discountHardcover, setDiscountHardcover] = useState('');
   const [bookDesc, setBookDesc] = useState('');
   const [bookStatus, setBookStatus] = useState<BookStatusValue>('প্রকাশিত');
+  const [bookGenre, setBookGenre] = useState('');
+  const [bookPageCount, setBookPageCount] = useState('');
+  const [bookPublishYear, setBookPublishYear] = useState('২০২৬ (কলকাতা)');
   const [existingCoverUrl, setExistingCoverUrl] = useState('');
+  const [existingSalesBannerUrl, setExistingSalesBannerUrl] = useState('');
   const [existingPdfUrl, setExistingPdfUrl] = useState('');
   const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [salesBannerFile, setSalesBannerFile] = useState<File | null>(null);
+  const [salesBannerPreview, setSalesBannerPreview] = useState('');
   const [pdfFile, setPdfFile] = useState<File | null>(null);
 
   // Coupons State
@@ -270,10 +276,17 @@ export default function AdminPage() {
 
     setEditBookId(book.id);
     setExistingCoverUrl(book.cover_image_url || '');
+    setExistingSalesBannerUrl(book.sales_banner_url || '');
+    setSalesBannerPreview(book.sales_banner_url || '');
     setExistingPdfUrl(book.pdf_url || '');
     setBookTitle(book.title);
     setBookAuthor(book.author);
     setBookIsbn(book.isbn || '');
+    setBookGenre(book.genre || '');
+    setBookPageCount(
+      book.page_count !== null && book.page_count !== undefined ? String(book.page_count) : ''
+    );
+    setBookPublishYear(book.publish_year || '২০২৬ (কলকাতা)');
     setPriceEbook(book.price_ebook ? String(book.price_ebook) : '');
     setDiscountEbook(book.discount_ebook ? String(book.discount_ebook) : '');
     setPricePaperback(
@@ -299,6 +312,7 @@ export default function AdminPage() {
     setBookDesc(book.description || '');
     setBookStatus(normalizeBookStatus(book.book_status));
     setCoverFile(null);
+    setSalesBannerFile(null);
     setPdfFile(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -306,10 +320,15 @@ export default function AdminPage() {
   const resetBookForm = () => {
     setEditBookId(null);
     setExistingCoverUrl('');
+    setExistingSalesBannerUrl('');
+    setSalesBannerPreview('');
     setExistingPdfUrl('');
     setBookTitle('');
     setBookAuthor('');
     setBookIsbn('');
+    setBookGenre('');
+    setBookPageCount('');
+    setBookPublishYear('২০২৬ (কলকাতা)');
     setPriceEbook('');
     setDiscountEbook('');
     setPricePaperback('');
@@ -319,6 +338,7 @@ export default function AdminPage() {
     setBookDesc('');
     setBookStatus('প্রকাশিত');
     setCoverFile(null);
+    setSalesBannerFile(null);
     setPdfFile(null);
   };
 
@@ -328,6 +348,7 @@ export default function AdminPage() {
 
     try {
       let coverUrl = existingCoverUrl;
+      let salesBannerUrl = existingSalesBannerUrl;
       let pdfUrl = existingPdfUrl;
 
       // Upload Cover File if provided
@@ -345,6 +366,29 @@ export default function AdminPage() {
           coverUrl = pubData.publicUrl;
         } else {
           console.warn('Storage upload note:', upErr.message);
+        }
+      }
+
+      // Upload Sales Page Banner (1920x600px) to 'book-banners' bucket if provided
+      if (salesBannerFile) {
+        const bExt = (salesBannerFile.name.split('.').pop() || 'jpg').toLowerCase();
+        const bName = `sales-banner-${Date.now()}-${Math.random()
+          .toString(36)
+          .substring(2, 8)}.${bExt}`;
+        const { error: bErr } = await supabase.storage
+          .from('book-banners')
+          .upload(bName, salesBannerFile, {
+            contentType: salesBannerFile.type || 'image/jpeg',
+            upsert: true,
+          });
+
+        if (!bErr) {
+          const { data: bPubData } = supabase.storage
+            .from('book-banners')
+            .getPublicUrl(bName);
+          salesBannerUrl = bPubData.publicUrl;
+        } else {
+          throw new Error(`সেলস পেজ ব্যানার আপলোড করতে সমস্যা হয়েছে: ${bErr.message}`);
         }
       }
 
@@ -380,6 +424,9 @@ export default function AdminPage() {
         title: bookTitle.trim(),
         author: bookAuthor.trim(),
         isbn: bookIsbn.trim() || null,
+        genre: bookGenre.trim() || null,
+        page_count: bookPageCount.trim() || null,
+        publish_year: bookPublishYear.trim() || '২০২৬ (কলকাতা)',
         price: basePrice,
         discount_price: baseDiscount,
         price_ebook: pEbook,
@@ -389,7 +436,10 @@ export default function AdminPage() {
         price_hardcover: pHard,
         discount_hardcover: dHard,
         description: bookDesc.trim(),
-        cover_image_url: coverUrl || 'https://images.unsplash.com/photo-1544947950-fa07a98d237f?auto=format&fit=crop&w=600&q=80',
+        cover_image_url:
+          coverUrl ||
+          'https://images.unsplash.com/photo-1544947950-fa07a98d237f?auto=format&fit=crop&w=600&q=80',
+        sales_banner_url: salesBannerUrl || null,
         pdf_url: pdfUrl || null,
         book_status: bookStatus,
       };
@@ -995,6 +1045,47 @@ export default function AdminPage() {
                     />
                   </div>
 
+                  {/* Genre, Page Count, Publish Year */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block font-semibold mb-1 text-stone-700">
+                        বিভাগ (Genre)
+                      </label>
+                      <input
+                        type="text"
+                        value={bookGenre}
+                        onChange={(e) => setBookGenre(e.target.value)}
+                        placeholder="যেমন: সামাজিক উপন্যাস / থ্রিলার"
+                        className="w-full border border-stone-300 rounded-xl p-2.5 outline-none focus:border-emerald-700"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold mb-1 text-stone-700">
+                        পৃষ্ঠা সংখ্যা (Page Count)
+                      </label>
+                      <input
+                        type="text"
+                        value={bookPageCount}
+                        onChange={(e) => setBookPageCount(e.target.value)}
+                        placeholder="যেমন: ২৪০ পৃষ্ঠা"
+                        className="w-full border border-stone-300 rounded-xl p-2.5 outline-none focus:border-emerald-700"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold mb-1 text-stone-700">
+                      প্রথম প্রকাশ (Publish Year)
+                    </label>
+                    <input
+                      type="text"
+                      value={bookPublishYear}
+                      onChange={(e) => setBookPublishYear(e.target.value)}
+                      placeholder="যেমন: ২০২৬ (কলকাতা)"
+                      className="w-full border border-stone-300 rounded-xl p-2.5 outline-none focus:border-emerald-700"
+                    />
+                  </div>
+
                   <div>
                     <label className="block font-semibold mb-1 text-stone-700">
                       Book Status / Badge (বইয়ের স্ট্যাটাস / ব্যাজ)
@@ -1122,6 +1213,59 @@ export default function AdminPage() {
                     </p>
                   </div>
 
+                  {/* Sales Page Banner upload (book-banners bucket -> sales_banner_url) */}
+                  <div className="p-3 bg-emerald-50/50 rounded-2xl border border-emerald-200/70 space-y-2">
+                    <label className="block font-semibold text-emerald-950">
+                      বইয়ের সেলস পেজ ব্যানার (Sales Page Banner - 1920x600px)
+                    </label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0] || null;
+                        setSalesBannerFile(file);
+                        if (file) {
+                          try {
+                            const preview = await fileToCompressedDataUrl(file);
+                            setSalesBannerPreview(preview);
+                          } catch {
+                            setSalesBannerPreview('');
+                          }
+                        } else {
+                          setSalesBannerPreview(existingSalesBannerUrl);
+                        }
+                      }}
+                      className="w-full border border-emerald-300 rounded-xl p-2 text-stone-700 bg-white"
+                    />
+                    {salesBannerPreview && (
+                      <div className="relative w-full aspect-[16/5] rounded-xl overflow-hidden border border-stone-200 bg-stone-900">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={salesBannerPreview}
+                          alt="সেলস পেজ ব্যানার প্রিভিউ"
+                          className="w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSalesBannerFile(null);
+                            setExistingSalesBannerUrl('');
+                            setSalesBannerPreview('');
+                          }}
+                          className="absolute top-1.5 right-1.5 bg-stone-900/80 hover:bg-red-600 text-white text-[10px] font-semibold px-2 py-1 rounded-lg transition cursor-pointer"
+                        >
+                          সরান
+                        </button>
+                      </div>
+                    )}
+                    <p className="text-[10px] text-stone-500">
+                      {existingSalesBannerUrl
+                        ? 'বর্তমান ব্যানার যুক্ত আছে। পরিবর্তন করতে নতুন ছবি বাছুন (book-banners বাকেটে সেভ হবে)।'
+                        : 'সেলস পেজের উপরের হিরো ব্যানারের জন্য 1920×600px ছবি আপলোড করুন (না দিলে এমেরাল্ড-গোল্ড ব্যানার দেখাবে)।'}
+                    </p>
+                  </div>
+
                   {/* Sample PDF upload */}
                   <div>
                     <label className="block font-semibold mb-1 text-stone-700">
@@ -1232,7 +1376,11 @@ export default function AdminPage() {
                                 </h5>
                                 <BookStatusBadge status={b.book_status} size="sm" />
                               </div>
-                              <p className="text-xs text-stone-500 mt-0.5">{b.author}</p>
+                              <p className="text-xs text-stone-500 mt-0.5">
+                                {b.author}
+                                {b.genre ? ` · ${b.genre}` : ''}
+                                {b.page_count ? ` · ${b.page_count}` : ''}
+                              </p>
                               <div className="flex flex-wrap gap-1.5 mt-1 text-[10px]">
                                 <span className="bg-blue-50 text-blue-800 px-1.5 py-0.5 rounded font-medium border border-blue-100">
                                   {ebookStr}
@@ -1243,11 +1391,31 @@ export default function AdminPage() {
                                 <span className="bg-purple-50 text-purple-800 px-1.5 py-0.5 rounded font-medium border border-purple-100">
                                   {hardStr}
                                 </span>
+                                {b.sales_banner_url && (
+                                  <span className="bg-amber-50 text-amber-800 px-1.5 py-0.5 rounded font-medium border border-amber-200">
+                                    ব্যানার যুক্ত
+                                  </span>
+                                )}
                               </div>
                             </div>
                           </div>
 
                           <div className="flex items-center gap-2 shrink-0">
+                            <Link
+                              href={
+                                (b.title || '').includes('শিমলা')
+                                  ? '/shimlay-sonkot'
+                                  : (b.title || '').includes('ছাদ')
+                                  ? '/chad'
+                                  : `/book/${b.id}`
+                              }
+                              target="_blank"
+                              className="text-xs bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 px-2.5 py-1.5 rounded-xl font-medium transition flex items-center gap-1"
+                              title="সেলস পেজ দেখুন"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                              <span className="hidden sm:inline">পেজ</span>
+                            </Link>
                             <button
                               onClick={() => startEditBook(b)}
                               type="button"

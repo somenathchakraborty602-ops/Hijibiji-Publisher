@@ -52,11 +52,14 @@ export interface Book {
   discount_hardcover?: number | null;
   description?: string | null;
   cover_image_url?: string | null;
+  sales_banner_url?: string | null;
   pdf_url?: string | null;
   book_status?: string | null;
+  page_count?: string | number | null;
+  genre?: string | null;
+  publish_year?: string | null;
   created_at?: string;
   slug?: string;
-  genre?: string;
 }
 
 export type BookFormatKey = 'ebook' | 'paperback' | 'hardcover';
@@ -226,8 +229,11 @@ export const INITIAL_BOOKS: Book[] = [
       'বরফঢাকা পাইনবনের ছায়ায় ঢাকা শিমলার প্রাচীন এক কটেজ। পাহাড়ি কুয়াশার চাদরে ঘেরা সেই নিস্তব্ধ রাতে হঠাৎ ঘটে যায় এক চাঞ্চল্যকর অন্তর্ধানের ঘটনা। একে একে উন্মোচিত হতে থাকে বহু বছরের পুরনো গোপন পারিবারিক সত্য। প্রতি পাতায় টানটান উত্তেজনা আর বুদ্ধির লড়াইয়ে ভরপুর এই নতুন উপন্যাসটি পাঠকদের শেষ পাতা পর্যন্ত রুদ্ধশ্বাসে বেঁধে রাখবে।',
     cover_image_url:
       'https://images.unsplash.com/photo-1544947950-fa07a98d237f?auto=format&fit=crop&w=600&q=80',
+    sales_banner_url: null,
     slug: 'shimlay-sonkot',
     genre: 'রহস্য ও থ্রিলার',
+    page_count: '২২০ পৃষ্ঠা',
+    publish_year: '২০২৬ (কলকাতা)',
   },
   {
     id: 'chad-default',
@@ -246,8 +252,11 @@ export const INITIAL_BOOKS: Book[] = [
       "'ছাদ' নিছক কোনো ইট-কাঠ-পাথরের আচ্ছাদন নয়; নারীর নিরাপত্তা, ভরসা আর আত্মমর্যাদার পরম আশ্রয়। কন্যাদায়গ্রস্ত মধ্যবিত্তের দেনাপাওনা, পণের নির্মম বলিদান আর পারিবারিক কূটচালে বিক্রি হয়ে যাওয়া সুমিতার লড়াই এক অনন্য দলিল। অসম দাম্পত্যের রূঢ় বাস্তবের মুখে দাঁড়িয়ে নিজের শিক্ষাবঞ্চিত অপূর্ণ স্বপ্নকে শক্তিতে বদলে মেয়ে পারমিতাকে স্বাবলম্বী করে তোলার মাধ্যমে প্রজন্মের পর প্রজন্ম নারীর মুক্তির দিশা দেখায় এই উপন্যাস।",
     cover_image_url:
       'https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=600&q=80',
+    sales_banner_url: null,
     slug: 'chad',
     genre: 'সামাজিক উপন্যাস',
+    page_count: '২৪০ পৃষ্ঠা',
+    publish_year: '২০২৬ (কলকাতা)',
   },
   {
     id: 'kalpurush-default',
@@ -266,8 +275,11 @@ export const INITIAL_BOOKS: Book[] = [
       'উত্তর কলকাতার বনেদি রাজবাড়ির প্রাচীন লাইব্রেরিতে পাওয়া একটি সংকেতলিপি। সেই লিপি পাঠের সাথে সাথেই খুন হতে শুরু করে শহরের তিন স্বনামধন্য গবেষক। গোয়েন্দা অনির্বাণ সেনের মুখোমুখি এবার এক অলৌকিক ষড়যন্ত্রকারী।',
     cover_image_url:
       'https://images.unsplash.com/photo-1476275466078-4007374efbbe?auto=format&fit=crop&w=600&q=80',
+    sales_banner_url: null,
     slug: 'kalpurusher-chhaya',
     genre: 'রহস্য ও থ্রিলার',
+    page_count: '১৯২ পৃষ্ঠা',
+    publish_year: '২০২৬ (কলকাতা)',
   },
   {
     id: 'neel-nirjonota-default',
@@ -286,7 +298,10 @@ export const INITIAL_BOOKS: Book[] = [
       'প্রেম, বিরহ আর নাগরিক ক্লান্তি পেরিয়ে একাকীত্বের গভীর শান্ত অনুভূতি নিয়ে রচিত পঁচাত্তরটি আধুনিক কবিতার অনন্য সংকলন। প্রতিটি কবিতাই মনের গভীরে এক স্নিগ্ধ আলো ফেলে।',
     cover_image_url:
       'https://images.unsplash.com/photo-1516979187457-637abb4f9353?auto=format&fit=crop&w=600&q=80',
+    sales_banner_url: null,
     slug: 'neel-nirjonota',
     genre: 'কবিতা',
+    page_count: '৯৬ পৃষ্ঠা',
+    publish_year: '২০২৬ (কলকাতা)',
   },
 ];
