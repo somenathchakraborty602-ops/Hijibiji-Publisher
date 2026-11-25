@@ -25,6 +25,13 @@ import {
   MessageCircle,
   Image as ImageIcon,
   Link2,
+  Feather,
+  Download,
+  Mail,
+  AlertTriangle,
+  Clock,
+  IndianRupee,
+  ShieldCheck,
 } from 'lucide-react';
 import {
   supabase,
@@ -44,6 +51,71 @@ import { BookStatusBadge } from '@/components/BookStatusBadge';
 
 const ADMIN_PIN = 'some@1051';
 
+type AdminOrder = Order & { applied_coupon?: string | null };
+type AdminBook = Book & {
+  allowed_coupons?: string[] | null;
+  active_coupons?: string[] | null;
+};
+type AdminCoupon = Omit<Coupon, 'discount_type'> & {
+  discount_type?: 'percentage' | 'flat' | 'fixed' | string;
+  promoter_name?: string | null;
+};
+
+interface AuthorSubmission {
+  id: string;
+  submission_code: string;
+  author_name: string;
+  whatsapp: string;
+  email: string;
+  manuscript_title: string;
+  genre: string;
+  page_or_word_count?: string | null;
+  file_url?: string | null;
+  payment_status: string;
+  transaction_id?: string | null;
+  review_status?: string | null;
+  created_at: string;
+  refund_deadline?: string | null;
+  declaration_accepted?: boolean | null;
+  declaration_timestamp?: string | null;
+}
+
+const AUTHOR_REVIEW_STATUS_OPTIONS = [
+  'New',
+  'Under Review',
+  'Feedback Report Sent',
+  'Selected for 30-Day Promo',
+  'Rejected / Refunded',
+] as const;
+
+const AUTHOR_EVALUATION_FEE = 500;
+const DAY_MS = 1000 * 60 * 60 * 24;
+
+const PROMOTER_CACHE_KEY = 'hijibiji_coupon_promoters';
+
+function readPromoterCache(): Record<string, string> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem(PROMOTER_CACHE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function writePromoterCache(code: string, promoterName: string) {
+  if (typeof window === 'undefined') return;
+  try {
+    const cache = readPromoterCache();
+    if (promoterName) {
+      cache[code] = promoterName;
+    } else {
+      delete cache[code];
+    }
+    localStorage.setItem(PROMOTER_CACHE_KEY, JSON.stringify(cache));
+  } catch {}
+}
+
 export default function AdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
@@ -56,16 +128,18 @@ export default function AdminPage() {
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState(false);
 
-  // Active tab: 'orders' | 'books' | 'coupons' | 'banners'
-  const [activeTab, setActiveTab] = useState<'orders' | 'books' | 'coupons' | 'banners'>('orders');
+  // Active tab: 'orders' | 'books' | 'coupons' | 'banners' | 'author-support'
+  const [activeTab, setActiveTab] = useState<
+    'orders' | 'books' | 'coupons' | 'banners' | 'author-support'
+  >('orders');
 
   // Orders State
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [orderSearch, setOrderSearch] = useState('');
 
   // Books State
-  const [books, setBooks] = useState<Book[]>([]);
+  const [books, setBooks] = useState<AdminBook[]>([]);
   const [booksLoading, setBooksLoading] = useState(false);
   const [savingBook, setSavingBook] = useState(false);
 
@@ -85,6 +159,7 @@ export default function AdminPage() {
   const [bookGenre, setBookGenre] = useState('');
   const [bookPageCount, setBookPageCount] = useState('');
   const [bookPublishYear, setBookPublishYear] = useState('২০২৬ (কলকাতা)');
+  const [selectedBookCoupons, setSelectedBookCoupons] = useState<string[]>([]);
   const [existingCoverUrl, setExistingCoverUrl] = useState('');
   const [existingSalesBannerUrl, setExistingSalesBannerUrl] = useState('');
   const [existingPdfUrl, setExistingPdfUrl] = useState('');
@@ -94,11 +169,15 @@ export default function AdminPage() {
   const [pdfFile, setPdfFile] = useState<File | null>(null);
 
   // Coupons State
-  const [coupons, setCoupons] = useState<Coupon[]>([]);
+  const [coupons, setCoupons] = useState<AdminCoupon[]>([]);
   const [couponsLoading, setCouponsLoading] = useState(false);
+  const [savingCoupon, setSavingCoupon] = useState(false);
   const [couponCode, setCouponCode] = useState('');
-  const [couponPct, setCouponPct] = useState('');
+  const [couponPromoter, setCouponPromoter] = useState('');
+  const [couponDiscountType, setCouponDiscountType] = useState<'percentage' | 'flat'>('percentage');
+  const [couponValue, setCouponValue] = useState('');
   const [couponMin, setCouponMin] = useState('0');
+  const [couponIsActive, setCouponIsActive] = useState(true);
 
   // Banners State (Supabase 'banners' table, up to 3 banners)
   const [banners, setBanners] = useState<BannerSlide[]>([]);
@@ -110,6 +189,14 @@ export default function AdminPage() {
   const [bannerPreviewUrl, setBannerPreviewUrl] = useState<string>('');
   const [bannerLinkUrl, setBannerLinkUrl] = useState<string>('');
   const [bannerSortOrder, setBannerSortOrder] = useState<1 | 2 | 3>(1);
+
+  // Author Support Submissions State
+  const [authorSubmissions, setAuthorSubmissions] = useState<AuthorSubmission[]>([]);
+  const [submissionsLoading, setSubmissionsLoading] = useState(false);
+  const [submissionsError, setSubmissionsError] = useState<string | null>(null);
+  const [submissionFilter, setSubmissionFilter] = useState<'All' | 'Paid' | 'Pending'>('All');
+  const [updatingSubmissionId, setUpdatingSubmissionId] = useState<string | null>(null);
+  const [nowTimestamp, setNowTimestamp] = useState<number>(() => Date.now());
 
   // --- Orders Logic ---
   const loadOrders = React.useCallback(async () => {
@@ -173,25 +260,15 @@ export default function AdminPage() {
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (!error && data && data.length > 0) {
-        setCoupons(data);
+      if (!error && data) {
+        const promoterCache = readPromoterCache();
+        const hydrated: AdminCoupon[] = (data as AdminCoupon[]).map((c) => ({
+          ...c,
+          promoter_name: c.promoter_name || promoterCache[c.code] || null,
+        }));
+        setCoupons(hydrated);
       } else {
-        setCoupons([
-          {
-            code: 'HIJIBIJIPRE',
-            discount_type: 'percentage',
-            discount_value: 40,
-            min_order_value: 0,
-            is_active: true,
-          },
-          {
-            code: 'BOIPROKASH10',
-            discount_type: 'percentage',
-            discount_value: 10,
-            min_order_value: 0,
-            is_active: true,
-          },
-        ]);
+        setCoupons([]);
       }
     } catch {
       setCoupons([]);
@@ -213,6 +290,55 @@ export default function AdminPage() {
     }
   }, []);
 
+  // --- Author Support Submissions Logic ---
+  const loadAuthorSubmissions = React.useCallback(async () => {
+    setSubmissionsLoading(true);
+    setSubmissionsError(null);
+    try {
+      const { data, error } = await supabase
+        .from('author_submissions')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setAuthorSubmissions((data || []) as AuthorSubmission[]);
+      setNowTimestamp(Date.now());
+    } catch (err: any) {
+      console.warn('Could not load author submissions from Supabase:', err);
+      setSubmissionsError(
+        err?.message || 'পাণ্ডুলিপির তালিকা লোড করতে সমস্যা হয়েছে।'
+      );
+    } finally {
+      setSubmissionsLoading(false);
+    }
+  }, []);
+
+  const handleReviewStatusChange = async (submissionId: string, nextStatus: string) => {
+    setUpdatingSubmissionId(submissionId);
+    setSubmissionsError(null);
+    const previous = authorSubmissions;
+    setAuthorSubmissions((prev) =>
+      prev.map((item) =>
+        item.id === submissionId ? { ...item, review_status: nextStatus } : item
+      )
+    );
+    try {
+      const { error } = await supabase
+        .from('author_submissions')
+        .update({ review_status: nextStatus })
+        .eq('id', submissionId);
+
+      if (error) throw error;
+    } catch (err: any) {
+      setAuthorSubmissions(previous);
+      setSubmissionsError(
+        'রিভিউ স্ট্যাটাস আপডেট করতে সমস্যা হয়েছে: ' + (err?.message || 'অজানা ত্রুটি')
+      );
+    } finally {
+      setUpdatingSubmissionId(null);
+    }
+  };
+
   // Fetch data on login
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -221,9 +347,10 @@ export default function AdminPage() {
       loadBooks();
       loadCoupons();
       loadBanners();
+      loadAuthorSubmissions();
     }, 0);
     return () => clearTimeout(timer);
-  }, [isAuthenticated, loadOrders, loadBooks, loadCoupons, loadBanners]);
+  }, [isAuthenticated, loadOrders, loadBooks, loadCoupons, loadBanners, loadAuthorSubmissions]);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -270,7 +397,7 @@ export default function AdminPage() {
     }
   };
 
-  const startEditBook = (book: Book) => {
+  const startEditBook = (book: AdminBook) => {
     const hasExplicitFormats =
       book.price_ebook != null || book.price_paperback != null || book.price_hardcover != null;
 
@@ -287,6 +414,12 @@ export default function AdminPage() {
       book.page_count !== null && book.page_count !== undefined ? String(book.page_count) : ''
     );
     setBookPublishYear(book.publish_year || '২০২৬ (কলকাতা)');
+    const assigned = Array.isArray(book.allowed_coupons)
+      ? book.allowed_coupons
+      : Array.isArray(book.active_coupons)
+      ? book.active_coupons
+      : [];
+    setSelectedBookCoupons(assigned.map((c) => String(c).toUpperCase()));
     setPriceEbook(book.price_ebook ? String(book.price_ebook) : '');
     setDiscountEbook(book.discount_ebook ? String(book.discount_ebook) : '');
     setPricePaperback(
@@ -329,6 +462,7 @@ export default function AdminPage() {
     setBookGenre('');
     setBookPageCount('');
     setBookPublishYear('২০২৬ (কলকাতা)');
+    setSelectedBookCoupons([]);
     setPriceEbook('');
     setDiscountEbook('');
     setPricePaperback('');
@@ -340,6 +474,13 @@ export default function AdminPage() {
     setCoverFile(null);
     setSalesBannerFile(null);
     setPdfFile(null);
+  };
+
+  const toggleBookCoupon = (code: string) => {
+    const upper = code.toUpperCase();
+    setSelectedBookCoupons((prev) =>
+      prev.includes(upper) ? prev.filter((c) => c !== upper) : [...prev, upper]
+    );
   };
 
   const handleSaveBook = async (e: React.FormEvent) => {
@@ -420,7 +561,7 @@ export default function AdminPage() {
       const basePrice = pPaper || pEbook || pHard || 300;
       const baseDiscount = dPaper || dEbook || dHard || null;
 
-      const bookPayload = {
+      const baseBookPayload = {
         title: bookTitle.trim(),
         author: bookAuthor.trim(),
         isbn: bookIsbn.trim() || null,
@@ -444,19 +585,31 @@ export default function AdminPage() {
         book_status: bookStatus,
       };
 
-      if (editBookId) {
-        const { error } = await supabase
-          .from('books')
-          .update(bookPayload)
-          .eq('id', editBookId);
+      const saveBookRecord = async (couponColumn: 'allowed_coupons' | 'active_coupons') => {
+        const payload = {
+          ...baseBookPayload,
+          [couponColumn]: selectedBookCoupons,
+        };
+        if (editBookId) {
+          return supabase.from('books').update(payload).eq('id', editBookId);
+        }
+        return supabase.from('books').insert(payload);
+      };
 
-        if (error) throw error;
-        alert('বইটির তথ্য ও ফরম্যাট মূল্য সফলভাবে আপডেট হয়েছে!');
-      } else {
-        const { error } = await supabase.from('books').insert(bookPayload);
-        if (error) throw error;
-        alert('নতুন বইটি সফলভাবে ক্যাটালগে যুক্ত হয়েছে!');
+      // Primary save to 'allowed_coupons'; automatic fallback to 'active_coupons' if DB uses that column
+      let { error } = await saveBookRecord('allowed_coupons');
+      if (error && error.message?.toLowerCase().includes('allowed_coupons')) {
+        const fallbackRes = await saveBookRecord('active_coupons');
+        error = fallbackRes.error;
       }
+
+      if (error) throw error;
+
+      alert(
+        editBookId
+          ? 'বইটির তথ্য, মূল্য ও কুপন সফলভাবে আপডেট হয়েছে!'
+          : 'নতুন বইটি সফলভাবে ক্যাটালগে যুক্ত হয়েছে!'
+      );
 
       resetBookForm();
       loadBooks();
@@ -480,37 +633,92 @@ export default function AdminPage() {
   const handleAddCoupon = async (e: React.FormEvent) => {
     e.preventDefault();
     const code = couponCode.trim().toUpperCase();
-    const pct = Number(couponPct);
+    const promoter = couponPromoter.trim();
+    const val = Number(couponValue);
     const min = Number(couponMin || 0);
 
+    if (!code || !val || val <= 0) {
+      alert('সঠিক কুপন কোড ও ছাড়ের পরিমাণ দিন।');
+      return;
+    }
+
+    setSavingCoupon(true);
     try {
-      const { error } = await supabase.from('coupons').insert({
+      const fullPayload: Record<string, any> = {
         code,
-        discount_type: 'percentage',
-        discount_value: pct,
+        promoter_name: promoter || null,
+        discount_type: couponDiscountType,
+        discount_value: val,
         min_order_value: min,
-        is_active: true,
-      });
+        is_active: couponIsActive,
+      };
+
+      let { error } = await supabase.from('coupons').insert(fullPayload);
+
+      // Automatic fallback if 'promoter_name' column is not yet created in Supabase 'coupons' table
+      if (error && error.message?.toLowerCase().includes('promoter_name')) {
+        const fallbackPayload = {
+          code,
+          discount_type: couponDiscountType,
+          discount_value: val,
+          min_order_value: min,
+          is_active: couponIsActive,
+        };
+        const retryRes = await supabase.from('coupons').insert(fallbackPayload);
+        error = retryRes.error;
+      }
 
       if (error) throw error;
+
+      if (promoter) {
+        writePromoterCache(code, promoter);
+      }
+
       setCouponCode('');
-      setCouponPct('');
+      setCouponPromoter('');
+      setCouponDiscountType('percentage');
+      setCouponValue('');
       setCouponMin('0');
+      setCouponIsActive(true);
       loadCoupons();
-      alert('কুপন সফলভাবে তৈরি হয়েছে!');
+      alert(`কুপন "${code}" সফলভাবে তৈরি হয়েছে!`);
     } catch (e: any) {
       alert('কুপন তৈরি করতে ত্রুটি: ' + e?.message);
+    } finally {
+      setSavingCoupon(false);
+    }
+  };
+
+  const handleToggleCouponActive = async (coupon: AdminCoupon) => {
+    const nextActive = !coupon.is_active;
+    try {
+      const query = coupon.id
+        ? supabase.from('coupons').update({ is_active: nextActive }).eq('id', coupon.id)
+        : supabase.from('coupons').update({ is_active: nextActive }).eq('code', coupon.code);
+      const { error } = await query;
+      if (error) throw error;
+
+      setCoupons((prev) =>
+        prev.map((c) =>
+          (coupon.id ? c.id === coupon.id : c.code === coupon.code)
+            ? { ...c, is_active: nextActive }
+            : c
+        )
+      );
+    } catch (e: any) {
+      alert('কুপন স্ট্যাটাস পরিবর্তন করতে ত্রুটি: ' + e?.message);
     }
   };
 
   const handleDeleteCoupon = async (id?: string, code?: string) => {
-    if (!confirm('কুপনটি বন্ধ করতে চান?')) return;
+    if (!confirm('আপনি কি নিশ্চিত কুপনটি স্থায়ীভাবে মুছে ফেলতে চান?')) return;
     try {
       if (id) {
         await supabase.from('coupons').delete().eq('id', id);
       } else if (code) {
         await supabase.from('coupons').delete().eq('code', code);
       }
+      if (code) writePromoterCache(code, '');
       setCoupons((prev) => prev.filter((c) => (id ? c.id !== id : c.code !== code)));
     } catch (e: any) {
       alert('ত্রুটি: ' + e?.message);
@@ -697,8 +905,52 @@ export default function AdminPage() {
       o.customer_phone?.toLowerCase().includes(q) ||
       o.order_items?.toLowerCase().includes(q) ||
       o.id?.toLowerCase().includes(q) ||
-      o.shipping_address?.toLowerCase().includes(q)
+      o.shipping_address?.toLowerCase().includes(q) ||
+      o.applied_coupon?.toLowerCase().includes(q)
     );
+  });
+
+  // --- Author Support Derived Metrics & Filters ---
+  const isPaidSubmission = (sub: AuthorSubmission) =>
+    (sub.payment_status || '').trim().toLowerCase() === 'paid';
+
+  const getSubmissionDaysInfo = (sub: AuthorSubmission) => {
+    const createdMs = new Date(sub.created_at).getTime();
+    const daysElapsed = Number.isNaN(createdMs)
+      ? 0
+      : Math.floor((nowTimestamp - createdMs) / DAY_MS);
+
+    const deadlineMs = sub.refund_deadline
+      ? new Date(sub.refund_deadline).getTime()
+      : Number.isNaN(createdMs)
+      ? NaN
+      : createdMs + 90 * DAY_MS;
+
+    const daysRemaining = Number.isNaN(deadlineMs)
+      ? null
+      : Math.ceil((deadlineMs - nowTimestamp) / DAY_MS);
+
+    const normalizedReview = (sub.review_status || 'New').trim();
+    const isUrgent75Alert =
+      isPaidSubmission(sub) &&
+      daysElapsed > 75 &&
+      (normalizedReview === 'New' || normalizedReview === 'Under Review');
+
+    return { daysElapsed, daysRemaining, isUrgent75Alert };
+  };
+
+  const paidSubmissionsCount = authorSubmissions.filter(isPaidSubmission).length;
+  const pendingSubmissionsCount = authorSubmissions.length - paidSubmissionsCount;
+  const totalCollectedFee = paidSubmissionsCount * AUTHOR_EVALUATION_FEE;
+  const refundReserveBuffer = Math.round(totalCollectedFee * 0.2);
+  const urgentSubmissionsCount = authorSubmissions.filter(
+    (sub) => getSubmissionDaysInfo(sub).isUrgent75Alert
+  ).length;
+
+  const filteredSubmissions = authorSubmissions.filter((sub) => {
+    if (submissionFilter === 'Paid') return isPaidSubmission(sub);
+    if (submissionFilter === 'Pending') return !isPaidSubmission(sub);
+    return true;
   });
 
   // Login Gate
@@ -832,7 +1084,7 @@ export default function AdminPage() {
             }`}
           >
             <TicketPercent className="w-4 h-4" />
-            <span>কুপন কোড ({coupons.length})</span>
+            <span>Coupon Manager (কুপন) ({coupons.length})</span>
           </button>
 
           <button
@@ -846,6 +1098,24 @@ export default function AdminPage() {
           >
             <ImageIcon className="w-4 h-4" />
             <span>হোম পেজ ব্যানার (Banners) ({banners.length}/3)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('author-support')}
+            type="button"
+            className={`px-4 py-2 font-semibold text-xs sm:text-sm rounded-xl transition flex items-center gap-2 cursor-pointer ${
+              activeTab === 'author-support'
+                ? 'bg-emerald-800 text-white shadow-xs'
+                : 'bg-white text-stone-600 hover:bg-stone-100'
+            }`}
+          >
+            <Feather className="w-4 h-4" />
+            <span>Author Support (পাণ্ডুলিপি) ({authorSubmissions.length})</span>
+            {urgentSubmissionsCount > 0 && (
+              <span className="ml-0.5 bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                {urgentSubmissionsCount}
+              </span>
+            )}
           </button>
         </div>
 
@@ -923,11 +1193,19 @@ export default function AdminPage() {
                         return (
                           <tr key={order.id} className="hover:bg-amber-50/30 transition">
                             <td className="p-3.5 text-stone-500 whitespace-nowrap">{dateStr}</td>
-                            <td className="p-3.5">
+                            <td className="p-3.5 space-y-1.5">
                               <span className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-950 font-bold px-3 py-1.5 rounded-lg text-xs border border-emerald-200 shadow-2xs">
-                                <BookMarked className="w-3.5 h-3.5 text-emerald-800" />
+                                <BookMarked className="w-3.5 h-3.5 text-emerald-800 shrink-0" />
                                 <span>{order.order_items || 'হিজিবিজি বই সম্ভার'}</span>
                               </span>
+                              {order.applied_coupon && (
+                                <div>
+                                  <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-950 font-bold px-2.5 py-0.5 rounded-md text-[11px] border border-amber-300 shadow-2xs font-mono">
+                                    <Tag className="w-3 h-3 text-amber-800 shrink-0" />
+                                    <span>কুপন: {order.applied_coupon}</span>
+                                  </span>
+                                </div>
+                              )}
                             </td>
                             <td className="p-3.5 font-medium text-stone-900">
                               <div className="font-bold">{order.customer_name}</div>
@@ -1297,6 +1575,69 @@ export default function AdminPage() {
                     />
                   </div>
 
+                  {/* Book-Specific Active Coupons Checkbox List (allowed_coupons) */}
+                  <div className="p-3.5 bg-amber-50/50 rounded-2xl border border-amber-200/80 space-y-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <label className="font-bold text-stone-800 flex items-center gap-1.5">
+                        <TicketPercent className="w-3.5 h-3.5 text-emerald-800" />
+                        <span>অনুমোদিত কুপন কোড (Allowed Coupons)</span>
+                      </label>
+                      <span className="text-[10px] font-semibold text-emerald-800">
+                        নির্বাচিত: {selectedBookCoupons.length}
+                      </span>
+                    </div>
+
+                    {coupons.filter((c) => c.is_active).length === 0 ? (
+                      <p className="text-[11px] text-stone-500">
+                        কোনো সক্রিয় কুপন নেই। প্রথমে &ldquo;Coupon Manager (কুপন)&rdquo; ট্যাব থেকে কুপন তৈরি করুন।
+                      </p>
+                    ) : (
+                      <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
+                        {coupons
+                          .filter((c) => c.is_active)
+                          .map((c) => {
+                            const upperCode = c.code.toUpperCase();
+                            const isChecked = selectedBookCoupons.includes(upperCode);
+                            const discountBadge =
+                              c.discount_type === 'flat' || c.discount_type === 'fixed'
+                                ? `₹${c.discount_value} ছাড়`
+                                : `${c.discount_value}% ছাড়`;
+
+                            return (
+                              <label
+                                key={c.id || c.code}
+                                className={`flex items-center justify-between gap-2 p-2 rounded-xl border cursor-pointer transition ${
+                                  isChecked
+                                    ? 'bg-emerald-50 border-emerald-400 text-emerald-950'
+                                    : 'bg-white border-stone-200 text-stone-700 hover:border-amber-300'
+                                }`}
+                              >
+                                <span className="flex items-center gap-2 min-w-0">
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={() => toggleBookCoupon(upperCode)}
+                                    className="w-3.5 h-3.5 rounded border-stone-400 text-emerald-800 focus:ring-emerald-700 cursor-pointer shrink-0"
+                                  />
+                                  <span className="font-bold font-mono text-xs truncate">
+                                    {upperCode}
+                                  </span>
+                                  {c.promoter_name && (
+                                    <span className="text-[10px] text-stone-500 truncate">
+                                      ({c.promoter_name})
+                                    </span>
+                                  )}
+                                </span>
+                                <span className="text-[10px] font-bold bg-amber-100 text-amber-900 px-2 py-0.5 rounded-md shrink-0 tabular-nums">
+                                  {discountBadge}
+                                </span>
+                              </label>
+                            );
+                          })}
+                      </div>
+                    )}
+                  </div>
+
                   <button
                     type="submit"
                     disabled={savingBook}
@@ -1396,6 +1737,17 @@ export default function AdminPage() {
                                     ব্যানার যুক্ত
                                   </span>
                                 )}
+                                {((Array.isArray(b.allowed_coupons) && b.allowed_coupons.length > 0) ||
+                                  (Array.isArray(b.active_coupons) && b.active_coupons.length > 0)) && (
+                                  <span className="bg-teal-50 text-teal-800 px-1.5 py-0.5 rounded font-medium border border-teal-200 font-mono">
+                                    কুপন:{' '}
+                                    {(
+                                      (Array.isArray(b.allowed_coupons) && b.allowed_coupons.length > 0
+                                        ? b.allowed_coupons
+                                        : b.active_coupons) || []
+                                    ).join(', ')}
+                                  </span>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -1443,9 +1795,29 @@ export default function AdminPage() {
           </section>
         )}
 
-        {/* 3. COUPONS SECTION */}
+        {/* 3. COUPON MANAGER SECTION */}
         {activeTab === 'coupons' && (
           <section className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-5 rounded-3xl border border-stone-200 shadow-xs">
+              <div>
+                <h3 className="text-lg font-bold font-serif-bn text-stone-900 flex items-center gap-2">
+                  <TicketPercent className="w-5 h-5 text-emerald-800" />
+                  <span>Coupon Manager (কুপন)</span>
+                </h3>
+                <p className="text-xs text-stone-500 mt-0.5">
+                  প্রমোটার ও মার্কেটিং কুপন কোড তৈরি, সক্রিয়/নিষ্ক্রিয় ও পরিচালনা করুন
+                </p>
+              </div>
+              <button
+                onClick={loadCoupons}
+                type="button"
+                className="text-xs bg-white border border-stone-300 hover:bg-stone-50 px-3 py-2 rounded-xl font-medium flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
+              >
+                <RotateCw className={`w-3.5 h-3.5 ${couponsLoading ? 'animate-spin' : ''}`} />
+                <span>রিফ্রেশ</span>
+              </button>
+            </div>
+
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Add Coupon Form */}
               <div className="bg-white p-6 rounded-3xl border border-stone-200 shadow-xs h-fit space-y-4">
@@ -1456,29 +1828,61 @@ export default function AdminPage() {
 
                 <form onSubmit={handleAddCoupon} className="space-y-3.5 text-xs">
                   <div>
-                    <label className="block font-semibold mb-1 text-stone-700">কুপন কোড *</label>
+                    <label className="block font-semibold mb-1 text-stone-700">
+                      Coupon Code (কুপন কোড) *
+                    </label>
                     <input
                       required
                       type="text"
                       value={couponCode}
-                      onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                      placeholder="যেমন: HIJIBIJIPRE"
-                      className="w-full uppercase border border-stone-300 rounded-xl p-2.5 outline-none focus:border-emerald-700"
+                      onChange={(e) => setCouponCode(e.target.value.toUpperCase().replace(/\s+/g, ''))}
+                      placeholder="যেমন: NILESH10"
+                      className="w-full uppercase font-mono border border-stone-300 rounded-xl p-2.5 outline-none focus:border-emerald-700"
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block font-semibold mb-1 text-stone-700">
+                      Promoter Name (প্রমোটারের নাম)
+                    </label>
+                    <input
+                      type="text"
+                      value={couponPromoter}
+                      onChange={(e) => setCouponPromoter(e.target.value)}
+                      placeholder="যেমন: নিলেশ / মার্কেটিং পার্টনার"
+                      className="w-full border border-stone-300 rounded-xl p-2.5 outline-none focus:border-emerald-700"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold mb-1 text-stone-700">
+                      Discount Type (ছাড়ের ধরন) *
+                    </label>
+                    <select
+                      value={couponDiscountType}
+                      onChange={(e) =>
+                        setCouponDiscountType(e.target.value as 'percentage' | 'flat')
+                      }
+                      className="w-full border border-stone-300 rounded-xl p-2.5 outline-none focus:border-emerald-700 bg-white font-medium cursor-pointer"
+                    >
+                      <option value="percentage">Percentage — শতাংশ ছাড় (%)</option>
+                      <option value="flat">Flat — নির্দিষ্ট টাকা ছাড় (₹)</option>
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2.5">
                     <div>
                       <label className="block font-semibold mb-1 text-stone-700">
-                        ছাড়ের শতাংশ (%) *
+                        Discount Value ({couponDiscountType === 'flat' ? '₹' : '%'}) *
                       </label>
                       <input
                         required
                         type="number"
-                        value={couponPct}
-                        onChange={(e) => setCouponPct(e.target.value)}
-                        placeholder="40"
-                        className="w-full border border-stone-300 rounded-xl p-2.5 outline-none focus:border-emerald-700"
+                        min="1"
+                        value={couponValue}
+                        onChange={(e) => setCouponValue(e.target.value)}
+                        placeholder={couponDiscountType === 'flat' ? 'যেমন: 50' : 'যেমন: 10'}
+                        className="w-full border border-stone-300 rounded-xl p-2.5 outline-none focus:border-emerald-700 tabular-nums"
                       />
                     </div>
                     <div>
@@ -1487,58 +1891,139 @@ export default function AdminPage() {
                       </label>
                       <input
                         type="number"
+                        min="0"
                         value={couponMin}
                         onChange={(e) => setCouponMin(e.target.value)}
                         placeholder="0"
-                        className="w-full border border-stone-300 rounded-xl p-2.5 outline-none focus:border-emerald-700"
+                        className="w-full border border-stone-300 rounded-xl p-2.5 outline-none focus:border-emerald-700 tabular-nums"
                       />
                     </div>
                   </div>
 
+                  {/* Active Toggle */}
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-stone-50 border border-stone-200">
+                    <div>
+                      <p className="font-semibold text-stone-800">Active Status (সক্রিয় রাখুন)</p>
+                      <p className="text-[10px] text-stone-500">
+                        {couponIsActive ? 'কুপনটি সাথে সাথে চালু থাকবে' : 'কুপনটি নিষ্ক্রিয় অবস্থায় তৈরি হবে'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={couponIsActive}
+                      onClick={() => setCouponIsActive((v) => !v)}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition cursor-pointer ${
+                        couponIsActive ? 'bg-emerald-700' : 'bg-stone-300'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition ${
+                          couponIsActive ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
                   <button
                     type="submit"
-                    className="w-full bg-emerald-800 hover:bg-emerald-900 text-white font-semibold py-3 rounded-xl transition shadow-md cursor-pointer"
+                    disabled={savingCoupon}
+                    className="w-full bg-emerald-800 hover:bg-emerald-900 text-white font-semibold py-3 rounded-xl transition shadow-md cursor-pointer disabled:opacity-50"
                   >
-                    কুপন চালু করুন
+                    {savingCoupon ? 'সংরক্ষণ হচ্ছে...' : 'কুপন সংরক্ষণ করুন'}
                   </button>
                 </form>
               </div>
 
               {/* Coupons List */}
               <div className="lg:col-span-2 space-y-3">
-                <h4 className="font-bold font-serif-bn text-base text-stone-900">
-                  সক্রিয় কুপন কোড ({coupons.length})
-                </h4>
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold font-serif-bn text-base text-stone-900">
+                    সকল কুপন কোড ({coupons.length})
+                  </h4>
+                  <span className="text-xs text-emerald-800 font-semibold">
+                    সক্রিয়: {coupons.filter((c) => c.is_active).length}
+                  </span>
+                </div>
 
                 {couponsLoading ? (
                   <p className="text-xs text-stone-400">কুপন তালিকা লোড হচ্ছে...</p>
                 ) : coupons.length === 0 ? (
-                  <p className="text-xs text-stone-400">কোনো কুপন তৈরি করা নেই।</p>
+                  <div className="bg-white p-8 rounded-2xl border border-stone-200 text-center text-xs text-stone-500">
+                    কোনো কুপন তৈরি করা নেই। বাম পাশের ফর্ম থেকে নতুন কুপন যোগ করুন।
+                  </div>
                 ) : (
                   <div className="space-y-3">
-                    {coupons.map((c) => (
-                      <div
-                        key={c.id || c.code}
-                        className="bg-white p-4 rounded-2xl border border-stone-200 shadow-2xs flex items-center justify-between"
-                      >
-                        <div>
-                          <span className="font-bold text-sm tracking-wider bg-stone-100 text-stone-900 px-3 py-1 rounded-md border border-stone-200">
-                            {c.code}
-                          </span>
-                          <p className="text-xs text-stone-600 mt-1.5">
-                            {c.discount_value}% ছাড় (ন্যূনতম অর্ডার ₹{c.min_order_value})
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => handleDeleteCoupon(c.id, c.code)}
-                          type="button"
-                          className="text-xs text-red-600 hover:bg-red-50 p-2 rounded-xl font-medium transition flex items-center gap-1 cursor-pointer"
+                    {coupons.map((c) => {
+                      const isFlat = c.discount_type === 'flat' || c.discount_type === 'fixed';
+                      return (
+                        <div
+                          key={c.id || c.code}
+                          className={`bg-white p-4 rounded-2xl border shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition ${
+                            c.is_active
+                              ? 'border-stone-200 hover:border-emerald-200'
+                              : 'border-stone-200/70 bg-stone-50/70 opacity-80'
+                          }`}
                         >
-                          <Trash2 className="w-4 h-4" />
-                          <span>বাতিল</span>
-                        </button>
-                      </div>
-                    ))}
+                          <div className="space-y-1.5">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-bold font-mono text-sm tracking-wider bg-stone-100 text-stone-900 px-3 py-1 rounded-lg border border-stone-200">
+                                {c.code}
+                              </span>
+                              <span className="text-xs font-bold bg-emerald-50 text-emerald-900 border border-emerald-200 px-2.5 py-0.5 rounded-lg tabular-nums">
+                                {isFlat ? `₹${c.discount_value} ফ্ল্যাট ছাড়` : `${c.discount_value}% ছাড়`}
+                              </span>
+                              {c.promoter_name && (
+                                <span className="text-xs font-semibold bg-amber-50 text-amber-900 border border-amber-200 px-2.5 py-0.5 rounded-lg">
+                                  প্রমোটার: {c.promoter_name}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-stone-500 tabular-nums">
+                              ধরন: {isFlat ? 'Flat (₹)' : 'Percentage (%)'} · ন্যূনতম অর্ডার: ₹
+                              {c.min_order_value || 0} · স্ট্যাটাস:{' '}
+                              <span
+                                className={
+                                  c.is_active
+                                    ? 'text-emerald-700 font-semibold'
+                                    : 'text-stone-500 font-semibold'
+                                }
+                              >
+                                {c.is_active ? 'Active (সক্রিয়)' : 'Inactive (বন্ধ)'}
+                              </span>
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-3 shrink-0">
+                            <button
+                              type="button"
+                              role="switch"
+                              aria-checked={c.is_active}
+                              onClick={() => handleToggleCouponActive(c)}
+                              title={c.is_active ? 'নিষ্ক্রিয় করুন' : 'সক্রিয় করুন'}
+                              className={`relative inline-flex h-6 w-11 items-center rounded-full transition cursor-pointer ${
+                                c.is_active ? 'bg-emerald-700' : 'bg-stone-300'
+                              }`}
+                            >
+                              <span
+                                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition ${
+                                  c.is_active ? 'translate-x-6' : 'translate-x-1'
+                                }`}
+                              />
+                            </button>
+
+                            <button
+                              onClick={() => handleDeleteCoupon(c.id, c.code)}
+                              type="button"
+                              className="text-xs text-red-600 hover:bg-red-50 px-2.5 py-1.5 rounded-xl font-medium transition flex items-center gap-1 cursor-pointer"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              <span>মুছুন</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1769,6 +2254,370 @@ export default function AdminPage() {
                     ))}
                   </div>
                 )}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* 5. AUTHOR SUPPORT (পাণ্ডুলিপি) SECTION */}
+        {activeTab === 'author-support' && (
+          <section className="space-y-6">
+            {/* Header & Refresh */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-bold font-serif-bn text-stone-900">
+                  Author Support (পাণ্ডুলিপি) — মূল্যায়ন ও প্রকাশনা তালিকা
+                </h3>
+                <p className="text-xs text-stone-500">
+                  জমাকৃত সকল পাণ্ডুলিপি, ₹৫০০ মূল্যায়ন ফি, ৯০ দিনের রিফান্ড সময়সীমা ও রিভিউ স্ট্যাটাস
+                </p>
+              </div>
+
+              <button
+                onClick={loadAuthorSubmissions}
+                type="button"
+                className="text-xs bg-white border border-stone-300 hover:bg-stone-50 px-3.5 py-2 rounded-xl font-medium flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
+              >
+                <RotateCw
+                  className={`w-3.5 h-3.5 ${submissionsLoading ? 'animate-spin' : ''}`}
+                />
+                <span>রিফ্রেশ</span>
+              </button>
+            </div>
+
+            {/* Top 3 Summary Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="bg-white rounded-3xl border border-stone-200 p-5 shadow-2xs flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold text-stone-500">
+                    মোট জমা পড়া পাণ্ডুলিপি
+                  </p>
+                  <p className="text-2xl sm:text-3xl font-bold font-serif-bn text-stone-900 mt-1 tabular-nums">
+                    {authorSubmissions.length}
+                  </p>
+                  <p className="text-[11px] text-stone-500 mt-1">
+                    Paid: <strong className="text-emerald-700">{paidSubmissionsCount}</strong> ·
+                    Pending: <strong className="text-amber-700">{pendingSubmissionsCount}</strong>
+                  </p>
+                </div>
+                <div className="w-11 h-11 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-center justify-center shrink-0">
+                  <FileText className="w-5 h-5" />
+                </div>
+              </div>
+
+              <div className="bg-white rounded-3xl border border-emerald-200/80 p-5 shadow-2xs flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold text-stone-500">
+                    মোট সংগৃহীত ইভ্যালুয়েশন ফি
+                  </p>
+                  <p className="text-2xl sm:text-3xl font-bold font-serif-bn text-emerald-900 mt-1 tabular-nums">
+                    ₹{totalCollectedFee.toLocaleString('en-IN')}
+                  </p>
+                  <p className="text-[11px] text-emerald-700 mt-1">
+                    পরিশোধিত (Paid) {paidSubmissionsCount} টি × ₹{AUTHOR_EVALUATION_FEE}
+                  </p>
+                </div>
+                <div className="w-11 h-11 rounded-2xl bg-emerald-100 border border-emerald-300 text-emerald-900 flex items-center justify-center shrink-0">
+                  <IndianRupee className="w-5 h-5" />
+                </div>
+              </div>
+
+              <div className="bg-white rounded-3xl border border-amber-200/90 p-5 shadow-2xs flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold text-stone-500">
+                    রিফান্ড রিজার্ভ বাফার (২০%)
+                  </p>
+                  <p className="text-2xl sm:text-3xl font-bold font-serif-bn text-amber-900 mt-1 tabular-nums">
+                    ₹{refundReserveBuffer.toLocaleString('en-IN')}
+                  </p>
+                  <p className="text-[11px] text-amber-700 mt-1">
+                    ৯০ দিনের রিফান্ড গ্যারান্টি সুরক্ষা তহবিল
+                  </p>
+                </div>
+                <div className="w-11 h-11 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 flex items-center justify-center shrink-0">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+              </div>
+            </div>
+
+            {submissionsError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-2xl text-xs font-medium flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{submissionsError}</span>
+              </div>
+            )}
+
+            {/* Filter Controls */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                {(
+                  [
+                    { key: 'All', label: `All (${authorSubmissions.length})` },
+                    { key: 'Paid', label: `Paid (${paidSubmissionsCount})` },
+                    { key: 'Pending', label: `Pending (${pendingSubmissionsCount})` },
+                  ] as const
+                ).map((item) => (
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={() => setSubmissionFilter(item.key)}
+                    className={`px-4 py-2 rounded-xl text-xs font-semibold border transition cursor-pointer ${
+                      submissionFilter === item.key
+                        ? 'bg-emerald-800 text-white border-emerald-800 shadow-2xs'
+                        : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+
+              {urgentSubmissionsCount > 0 && (
+                <div className="inline-flex items-center gap-1.5 bg-red-100 text-red-800 border border-red-300 px-3 py-1.5 rounded-xl text-xs font-bold">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                  <span>
+                    {urgentSubmissionsCount} টি পাণ্ডুলিপিতে 75+ Days Alert রয়েছে
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Submissions Table */}
+            <div className="bg-white rounded-3xl border border-stone-200 shadow-xs overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead className="bg-stone-50 text-stone-600 border-b border-stone-200 uppercase font-semibold">
+                    <tr>
+                      <th className="p-3.5 whitespace-nowrap">Submission ID</th>
+                      <th className="p-3.5">Author Details</th>
+                      <th className="p-3.5">Manuscript</th>
+                      <th className="p-3.5 whitespace-nowrap">Payment Status</th>
+                      <th className="p-3.5 whitespace-nowrap">Date &amp; Days Left</th>
+                      <th className="p-3.5 whitespace-nowrap">File</th>
+                      <th className="p-3.5 whitespace-nowrap">Review Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-100 text-stone-700">
+                    {submissionsLoading ? (
+                      <tr>
+                        <td colSpan={7} className="p-8 text-center text-stone-400">
+                          পাণ্ডুলিপির তথ্য লোড হচ্ছে...
+                        </td>
+                      </tr>
+                    ) : filteredSubmissions.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="p-8 text-center text-stone-400">
+                          এই ফিল্টারে কোনো পাণ্ডুলিপি পাওয়া যায়নি।
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredSubmissions.map((sub) => {
+                        const paid = isPaidSubmission(sub);
+                        const { daysElapsed, daysRemaining, isUrgent75Alert } =
+                          getSubmissionDaysInfo(sub);
+                        const dateStr = sub.created_at
+                          ? new Date(sub.created_at).toLocaleDateString('bn-BD', {
+                              day: 'numeric',
+                              month: 'short',
+                              year: 'numeric',
+                            })
+                          : '—';
+                        const currentReviewStatus = (sub.review_status || 'New').trim();
+                        const cleanWhatsapp = (sub.whatsapp || '').replace(/\D/g, '');
+
+                        return (
+                          <tr
+                            key={sub.id}
+                            className={
+                              isUrgent75Alert
+                                ? 'bg-red-50/90 hover:bg-red-100/70 transition border-l-4 border-l-red-600'
+                                : 'hover:bg-amber-50/30 transition'
+                            }
+                          >
+                            {/* Submission ID */}
+                            <td className="p-3.5 whitespace-nowrap align-top space-y-1.5">
+                              <div className="font-mono font-bold text-emerald-950 text-xs bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg inline-block">
+                                {sub.submission_code}
+                              </div>
+                              {isUrgent75Alert && (
+                                <div>
+                                  <span className="inline-flex items-center gap-1 bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-md shadow-2xs">
+                                    <AlertTriangle className="w-3 h-3 shrink-0" />
+                                    <span>75+ Days Alert</span>
+                                  </span>
+                                </div>
+                              )}
+                            </td>
+
+                            {/* Author Details */}
+                            <td className="p-3.5 align-top space-y-1 min-w-[180px]">
+                              <div className="font-bold text-stone-900 text-xs">
+                                {sub.author_name}
+                              </div>
+                              {sub.whatsapp && (
+                                <div className="flex items-center gap-2">
+                                  <a
+                                    href={`tel:${sub.whatsapp}`}
+                                    className="text-emerald-700 hover:underline font-semibold inline-flex items-center gap-1"
+                                  >
+                                    <Phone className="w-3 h-3 shrink-0" />
+                                    <span>{sub.whatsapp}</span>
+                                  </a>
+                                  {cleanWhatsapp && (
+                                    <a
+                                      href={`https://wa.me/91${cleanWhatsapp.slice(-10)}`}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="text-emerald-600 hover:text-emerald-800"
+                                      title="WhatsApp এ বার্তা পাঠান"
+                                    >
+                                      <MessageCircle className="w-3.5 h-3.5" />
+                                    </a>
+                                  )}
+                                </div>
+                              )}
+                              {sub.email && (
+                                <a
+                                  href={`mailto:${sub.email}`}
+                                  className="text-stone-500 hover:text-emerald-800 inline-flex items-center gap-1 break-all text-[11px]"
+                                >
+                                  <Mail className="w-3 h-3 shrink-0" />
+                                  <span>{sub.email}</span>
+                                </a>
+                              )}
+                            </td>
+
+                            {/* Manuscript */}
+                            <td className="p-3.5 align-top space-y-1.5 min-w-[180px]">
+                              <div className="font-bold font-serif-bn text-stone-900 text-sm leading-snug">
+                                {sub.manuscript_title}
+                              </div>
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="inline-block bg-amber-50 text-amber-900 border border-amber-200 px-2 py-0.5 rounded-md text-[11px] font-semibold">
+                                  {sub.genre || 'অন্যান্য'}
+                                </span>
+                                {sub.page_or_word_count && (
+                                  <span className="text-[11px] text-stone-500">
+                                    {sub.page_or_word_count}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Payment Status & Transaction ID */}
+                            <td className="p-3.5 align-top whitespace-nowrap space-y-1.5">
+                              <div>
+                                <span
+                                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                                    paid
+                                      ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                      : 'bg-amber-100 text-amber-800 border-amber-300'
+                                  }`}
+                                >
+                                  {paid ? 'Paid' : sub.payment_status || 'Pending'}
+                                </span>
+                              </div>
+                              <div className="text-[11px] text-stone-500 font-mono">
+                                {sub.transaction_id ? (
+                                  <span title={sub.transaction_id}>
+                                    TX: {sub.transaction_id}
+                                  </span>
+                                ) : (
+                                  <span className="text-stone-400">TX: —</span>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Submission Date & Days Remaining */}
+                            <td className="p-3.5 align-top whitespace-nowrap space-y-1">
+                              <div className="font-medium text-stone-800">{dateStr}</div>
+                              <div className="flex items-center gap-1 text-[11px]">
+                                <Clock
+                                  className={`w-3 h-3 shrink-0 ${
+                                    isUrgent75Alert ||
+                                    (daysRemaining !== null && daysRemaining <= 15)
+                                      ? 'text-red-600'
+                                      : 'text-stone-400'
+                                  }`}
+                                />
+                                {daysRemaining === null ? (
+                                  <span className="text-stone-400">—</span>
+                                ) : daysRemaining <= 0 ? (
+                                  <span className="font-bold text-red-700">
+                                    সময় শেষ ({Math.abs(daysRemaining)} দিন অতিক্রান্ত)
+                                  </span>
+                                ) : (
+                                  <span
+                                    className={
+                                      daysRemaining <= 15
+                                        ? 'font-bold text-red-700'
+                                        : 'font-semibold text-emerald-800'
+                                    }
+                                  >
+                                    {daysRemaining} দিন বাকি
+                                  </span>
+                                )}
+                              </div>
+                              {daysElapsed > 0 && (
+                                <div className="text-[10px] text-stone-400">
+                                  জমা হওয়ার {daysElapsed} দিন অতিক্রান্ত
+                                </div>
+                              )}
+                            </td>
+
+                            {/* Download Button */}
+                            <td className="p-3.5 align-top whitespace-nowrap">
+                              {sub.file_url ? (
+                                <a
+                                  href={sub.file_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  download
+                                  className="inline-flex items-center gap-1.5 bg-emerald-800 hover:bg-emerald-900 text-white font-semibold px-3 py-2 rounded-xl transition shadow-2xs text-xs"
+                                >
+                                  <Download className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                                  <span>Download .DOCX</span>
+                                </a>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-stone-400 bg-stone-100 border border-stone-200 px-2.5 py-1.5 rounded-xl text-[11px]">
+                                  ফাইল নেই
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Status Dropdown */}
+                            <td className="p-3.5 align-top whitespace-nowrap">
+                              <select
+                                value={currentReviewStatus}
+                                disabled={updatingSubmissionId === sub.id}
+                                onChange={(e) =>
+                                  handleReviewStatusChange(sub.id, e.target.value)
+                                }
+                                className={`text-xs font-semibold rounded-xl px-2.5 py-2 border outline-none cursor-pointer transition shadow-2xs disabled:opacity-60 ${
+                                  currentReviewStatus === 'Selected for 30-Day Promo'
+                                    ? 'bg-emerald-50 text-emerald-900 border-emerald-300'
+                                    : currentReviewStatus === 'Feedback Report Sent'
+                                    ? 'bg-sky-50 text-sky-900 border-sky-300'
+                                    : currentReviewStatus === 'Rejected / Refunded'
+                                    ? 'bg-red-50 text-red-800 border-red-300'
+                                    : currentReviewStatus === 'Under Review'
+                                    ? 'bg-amber-50 text-amber-900 border-amber-300'
+                                    : 'bg-white text-stone-800 border-stone-300'
+                                }`}
+                              >
+                                {AUTHOR_REVIEW_STATUS_OPTIONS.map((opt) => (
+                                  <option key={opt} value={opt}>
+                                    {opt}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
           </section>

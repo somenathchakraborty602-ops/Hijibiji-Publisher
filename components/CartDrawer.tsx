@@ -227,7 +227,10 @@ export function CartDrawer({
                       কুপন <strong>{appliedCoupon.code}</strong> কার্যকর (-₹{discount})
                     </span>
                     <span className="text-emerald-800 font-bold">
-                      {appliedCoupon.discount_value}% ছাড়
+                      {appliedCoupon.discount_type === 'flat' ||
+                      appliedCoupon.discount_type === 'fixed'
+                        ? `₹${appliedCoupon.discount_value} ছাড়`
+                        : `${appliedCoupon.discount_value}% ছাড়`}
                     </span>
                   </div>
                 ) : (

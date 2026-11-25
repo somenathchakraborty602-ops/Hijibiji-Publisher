@@ -11,6 +11,7 @@ import {
   AlertCircle,
   CheckCircle2,
   ExternalLink,
+  Tag,
 } from 'lucide-react';
 import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from '@/lib/supabase';
 
@@ -19,6 +20,7 @@ interface CheckoutModalProps {
   onClose: () => void;
   orderItemsSummary: string;
   totalAmount: number;
+  appliedCouponCode?: string | null;
   onOrderSuccess: (orderId: string, itemsSummary: string, amount: number) => void;
 }
 
@@ -74,6 +76,7 @@ export function CheckoutModal({
   onClose,
   orderItemsSummary,
   totalAmount,
+  appliedCouponCode,
   onOrderSuccess,
 }: CheckoutModalProps) {
   const [name, setName] = useState('');
@@ -119,6 +122,9 @@ export function CheckoutModal({
 
     try {
       // 1. Save the order in the Supabase 'orders' table (with status 'PENDING')
+      const normalizedCoupon = appliedCouponCode
+        ? appliedCouponCode.trim().toUpperCase()
+        : null;
       const { data: orderData, error: orderErr } = await supabase
         .from('orders')
         .insert({
@@ -127,6 +133,7 @@ export function CheckoutModal({
           shipping_address: fullAddress,
           total_amount: payableAmount,
           order_items: orderItemsSummary,
+          applied_coupon: normalizedCoupon,
           payment_status: 'PENDING',
         })
         .select()
@@ -370,6 +377,17 @@ export function CheckoutModal({
                     {orderItemsSummary}
                   </span>
                 </div>
+                {appliedCouponCode && (
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-semibold text-emerald-800 flex items-center gap-1">
+                      <Tag className="w-3.5 h-3.5" />
+                      প্রয়োগকৃত কুপন:
+                    </span>
+                    <span className="font-mono font-bold text-emerald-900 bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-md">
+                      {appliedCouponCode.trim().toUpperCase()}
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between items-center text-sm border-t border-amber-200/50 pt-2">
                   <span className="text-stone-700 font-medium">প্রদেয় সর্বমোট অঙ্ক:</span>
                   <span className="text-xl font-bold font-serif-bn text-emerald-950">

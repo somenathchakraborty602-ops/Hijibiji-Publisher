@@ -22,6 +22,7 @@ import {
   Layers,
   ExternalLink,
   X,
+  AlertCircle,
 } from 'lucide-react';
 import { Navbar } from '@/components/Navbar';
 import { CartDrawer, CartItem } from '@/components/CartDrawer';
@@ -51,7 +52,11 @@ export function BookSalesView({ book, loading = false }: BookSalesViewProps) {
     format: BookFormatKey;
   } | null>(null);
   const [couponCode, setCouponCode] = useState('');
-  const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
+  const [couponLoading, setCouponLoading] = useState(false);
+  const [appliedCouponState, setAppliedCouponState] = useState<{
+    bookId: string;
+    coupon: Coupon;
+  } | null>(null);
   const [couponMsg, setCouponMsg] = useState<{
     type: 'success' | 'error';
     text: string;
@@ -96,7 +101,7 @@ export function BookSalesView({ book, loading = false }: BookSalesViewProps) {
   useEffect(() => {
     const handleCartCleared = () => {
       setCart([]);
-      setAppliedCoupon(null);
+      setAppliedCouponState(null);
     };
     window.addEventListener('hijibiji_cart_cleared', handleCartCleared);
     return () => window.removeEventListener('hijibiji_cart_cleared', handleCartCleared);
@@ -132,22 +137,52 @@ export function BookSalesView({ book, loading = false }: BookSalesViewProps) {
   const hasDiscount = currentFormatObj.hasDiscount;
   const savingsAmount = hasDiscount && mrp > activePrice ? mrp - activePrice : 0;
 
-  // Coupon calculations
-  let couponDiscount = 0;
-  if (appliedCoupon) {
-    if (appliedCoupon.discount_type === 'percentage' || !appliedCoupon.discount_type) {
-      couponDiscount = Math.round((activePrice * appliedCoupon.discount_value) / 100);
-    } else {
-      couponDiscount = Math.min(activePrice, appliedCoupon.discount_value);
-    }
-  }
+  // Scope applied coupon to current book so switching books never leaks discounts
+  const appliedCoupon: Coupon | null =
+    appliedCouponState && appliedCouponState.bookId === book.id
+      ? appliedCouponState.coupon
+      : null;
 
+  // Book-specific allowed coupon codes (supports allowed_coupons with active_coupons fallback)
+  const rawAllowedCoupons = Array.isArray(book.allowed_coupons)
+    ? book.allowed_coupons
+    : Array.isArray(book.active_coupons)
+    ? book.active_coupons
+    : [];
+  const bookAllowedCoupons = rawAllowedCoupons
+    .map((c) => String(c).trim().toUpperCase())
+    .filter(Boolean);
+
+  const calculateCouponDiscount = (coupon: Coupon | null, amount: number): number => {
+    if (!coupon || amount <= 0) return 0;
+    const minOrder = Number(coupon.min_order_value || 0);
+    if (minOrder > 0 && amount < minOrder) return 0;
+    const value = Number(coupon.discount_value || 0);
+    if (value <= 0) return 0;
+    const normalizedType = String(coupon.discount_type || 'percentage')
+      .trim()
+      .toLowerCase();
+    if (normalizedType === 'flat' || normalizedType === 'fixed') {
+      return Math.min(amount, Math.round(value));
+    }
+    return Math.min(amount, Math.round((amount * value) / 100));
+  };
+
+  // Coupon calculations
+  const couponDiscount = calculateCouponDiscount(appliedCoupon, activePrice);
   const finalPayable = Math.max(0, activePrice - couponDiscount);
 
-  const handleApplyCoupon = async () => {
-    if (!couponCode.trim()) return;
-    setCouponMsg(null);
-    const code = couponCode.trim().toUpperCase();
+  const verifyBookCoupon = async (
+    rawCode: string,
+    orderAmount: number
+  ): Promise<{ success: boolean; coupon?: Coupon; message: string }> => {
+    const code = rawCode.trim().toUpperCase();
+    if (!code) {
+      return {
+        success: false,
+        message: 'দয়া করে একটি কুপন কোড লিখুন।',
+      };
+    }
 
     try {
       const { data, error } = await supabase
@@ -155,96 +190,86 @@ export function BookSalesView({ book, loading = false }: BookSalesViewProps) {
         .select('*')
         .eq('code', code)
         .eq('is_active', true)
-        .single();
+        .maybeSingle();
 
       if (error || !data) {
-        if (code === 'HIJIBIJIPRE' || code === 'BOIPROKASH10') {
-          const fb: Coupon = {
-            code,
-            discount_type: 'percentage',
-            discount_value: code === 'HIJIBIJIPRE' ? 40 : 10,
-            min_order_value: 0,
-            is_active: true,
-          };
-          setAppliedCoupon(fb);
-          setCouponMsg({
-            type: 'success',
-            text: `কুপন সফলভাবে প্রয়োগ হয়েছে! (${fb.discount_value}% ছাড়)`,
-          });
-          return;
-        }
-        setCouponMsg({ type: 'error', text: 'অবৈধ বা মেয়াদোত্তীর্ণ কুপন কোড।' });
-        return;
+        return {
+          success: false,
+          message: 'কুপন কোডটি সঠিক নয় অথবা বর্তমানে সক্রিয় নেই।',
+        };
       }
 
-      if (data.min_order_value && activePrice < data.min_order_value) {
-        setCouponMsg({
-          type: 'error',
-          text: `এই কুপনের জন্য ন্যূনতম অর্ডার মূল্য ₹${data.min_order_value} হতে হবে।`,
-        });
-        return;
+      if (!bookAllowedCoupons.includes(code)) {
+        return {
+          success: false,
+          message: 'এই বইটির জন্য এই কুপন কোডটি প্রযোজ্য নয়।',
+        };
       }
 
-      setAppliedCoupon(data);
-      setCouponMsg({
-        type: 'success',
-        text: `কুপন সফলভাবে যুক্ত হয়েছে! ${data.discount_value}${
-          data.discount_type === 'fixed' ? ' টাকা' : '%'
-        } ছাড় প্রযোজ্য।`,
-      });
+      const minOrder = Number(data.min_order_value || 0);
+      if (minOrder > 0 && orderAmount < minOrder) {
+        return {
+          success: false,
+          message: `এই কুপনের জন্য ন্যূনতম অর্ডার মূল্য ₹${minOrder} হতে হবে।`,
+        };
+      }
+
+      const verifiedCoupon = data as Coupon;
+      const computedDiscount = calculateCouponDiscount(verifiedCoupon, orderAmount);
+      const normalizedType = String(verifiedCoupon.discount_type || 'percentage')
+        .trim()
+        .toLowerCase();
+      const isFlat = normalizedType === 'flat' || normalizedType === 'fixed';
+
+      return {
+        success: true,
+        coupon: verifiedCoupon,
+        message: isFlat
+          ? `কুপন "${code}" সফলভাবে প্রয়োগ হয়েছে! ₹${computedDiscount} ছাড় প্রযোজ্য।`
+          : `কুপন "${code}" সফলভাবে প্রয়োগ হয়েছে! ${verifiedCoupon.discount_value}% (₹${computedDiscount}) ছাড় প্রযোজ্য।`,
+      };
     } catch {
-      setCouponMsg({ type: 'error', text: 'কুপন যাচাই করতে সমস্যা হয়েছে।' });
+      return {
+        success: false,
+        message: 'কুপন যাচাই করতে সমস্যা হয়েছে। দয়া করে আবার চেষ্টা করুন।',
+      };
     }
+  };
+
+  const handleApplyCoupon = async () => {
+    setCouponMsg(null);
+    setCouponLoading(true);
+    try {
+      const result = await verifyBookCoupon(couponCode, activePrice);
+      if (result.success && result.coupon) {
+        setAppliedCouponState({ bookId: book.id, coupon: result.coupon });
+        setCouponMsg({ type: 'success', text: result.message });
+      } else {
+        setAppliedCouponState(null);
+        setCouponMsg({ type: 'error', text: result.message });
+      }
+    } finally {
+      setCouponLoading(false);
+    }
+  };
+
+  const handleRemoveCoupon = () => {
+    setAppliedCouponState(null);
+    setCouponCode('');
+    setCouponMsg(null);
   };
 
   const handleCartCouponApply = async (
     code: string
   ): Promise<{ success: boolean; message: string }> => {
-    const cleanCode = code.trim().toUpperCase();
     const subtotal = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
-    try {
-      const { data, error } = await supabase
-        .from('coupons')
-        .select('*')
-        .eq('code', cleanCode)
-        .eq('is_active', true)
-        .single();
-
-      if (error || !data) {
-        if (cleanCode === 'HIJIBIJIPRE' || cleanCode === 'BOIPROKASH10') {
-          const fb: Coupon = {
-            code: cleanCode,
-            discount_type: 'percentage',
-            discount_value: cleanCode === 'HIJIBIJIPRE' ? 40 : 10,
-            min_order_value: 0,
-            is_active: true,
-          };
-          setAppliedCoupon(fb);
-          return {
-            success: true,
-            message: `কুপন সফলভাবে প্রয়োগ হয়েছে! (${fb.discount_value}% ছাড়)`,
-          };
-        }
-        return { success: false, message: 'অবৈধ বা মেয়াদোত্তীর্ণ কুপন কোড।' };
-      }
-
-      if (data.min_order_value && subtotal < data.min_order_value) {
-        return {
-          success: false,
-          message: `ন্যূনতম অর্ডার ₹${data.min_order_value} হতে হবে।`,
-        };
-      }
-
-      setAppliedCoupon(data);
-      return {
-        success: true,
-        message: `কুপন যুক্ত হয়েছে! ${data.discount_value}${
-          data.discount_type === 'fixed' ? ' টাকা' : '%'
-        } ছাড় প্রযোজ্য।`,
-      };
-    } catch {
-      return { success: false, message: 'কুপন যাচাই করতে ত্রুটি হয়েছে।' };
+    const result = await verifyBookCoupon(code, subtotal);
+    if (result.success && result.coupon) {
+      setAppliedCouponState({ bookId: book.id, coupon: result.coupon });
+      return { success: true, message: result.message };
     }
+    setAppliedCouponState(null);
+    return { success: false, message: result.message };
   };
 
   const formatBengaliName = currentFormatObj.bengaliName;
@@ -272,7 +297,7 @@ export function BookSalesView({ book, loading = false }: BookSalesViewProps) {
           title: book.title,
           author: book.author,
           format: formatBengaliName,
-          price: finalPayable,
+          price: activePrice,
           image: book.cover_image_url,
           qty: 1,
           isPreBooking,
@@ -301,12 +326,7 @@ export function BookSalesView({ book, loading = false }: BookSalesViewProps) {
   };
 
   const cartSubtotal = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
-  const cartDiscount =
-    appliedCoupon && cartSubtotal >= (appliedCoupon.min_order_value || 0)
-      ? appliedCoupon.discount_type === 'percentage' || !appliedCoupon.discount_type
-        ? Math.round((cartSubtotal * appliedCoupon.discount_value) / 100)
-        : Math.min(cartSubtotal, appliedCoupon.discount_value)
-      : 0;
+  const cartDiscount = calculateCouponDiscount(appliedCoupon, cartSubtotal);
   const cartTotalPayable = Math.max(0, cartSubtotal - cartDiscount);
 
   const bannerImgError = Boolean(book.sales_banner_url && failedBannerUrl === book.sales_banner_url);
@@ -610,24 +630,55 @@ export function BookSalesView({ book, loading = false }: BookSalesViewProps) {
                 </div>
 
                 {/* Coupon Input */}
-                <div className="space-y-1.5">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <label
+                      htmlFor={`coupon-input-${book.id}`}
+                      className="text-xs font-bold text-stone-700 flex items-center gap-1.5"
+                    >
+                      <Tag className="w-3.5 h-3.5 text-emerald-800 shrink-0" />
+                      <span>Have a Promo / Coupon Code? (কুপন কোড আছে?)</span>
+                    </label>
+                    {appliedCoupon && (
+                      <button
+                        type="button"
+                        onClick={handleRemoveCoupon}
+                        className="text-[11px] font-semibold text-red-600 hover:underline cursor-pointer"
+                      >
+                        কুপন সরান
+                      </button>
+                    )}
+                  </div>
+
                   <div className="flex gap-2">
                     <div className="relative flex-1">
                       <Tag className="w-3.5 h-3.5 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
                       <input
+                        id={`coupon-input-${book.id}`}
                         type="text"
                         value={couponCode}
-                        onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                        placeholder="কুপন কোড থাকলে লিখুন (যেমন: HIJIBIJIPRE)"
+                        onChange={(e) => {
+                          setCouponCode(e.target.value.toUpperCase());
+                          if (couponMsg?.type === 'error') setCouponMsg(null);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleApplyCoupon();
+                          }
+                        }}
+                        placeholder="প্রোমো বা কুপন কোড লিখুন..."
                         className="w-full bg-white border border-stone-300 rounded-xl pl-9 pr-3 py-2.5 text-xs sm:text-sm uppercase outline-none focus:border-emerald-700"
+                        disabled={couponLoading}
                       />
                     </div>
                     <button
                       type="button"
                       onClick={handleApplyCoupon}
-                      className="px-4 py-2.5 rounded-xl bg-stone-900 hover:bg-emerald-900 text-white text-xs sm:text-sm font-semibold transition shrink-0 cursor-pointer"
+                      disabled={couponLoading || !couponCode.trim()}
+                      className="px-4 py-2.5 rounded-xl bg-stone-900 hover:bg-emerald-900 text-white text-xs sm:text-sm font-semibold transition shrink-0 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                     >
-                      প্রয়োগ করুন
+                      {couponLoading ? 'যাচাই হচ্ছে...' : 'Apply'}
                     </button>
                   </div>
 
@@ -637,7 +688,11 @@ export function BookSalesView({ book, loading = false }: BookSalesViewProps) {
                         couponMsg.type === 'success' ? 'text-emerald-700' : 'text-red-600'
                       }`}
                     >
-                      {couponMsg.type === 'success' && <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />}
+                      {couponMsg.type === 'success' ? (
+                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                      ) : (
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      )}
                       <span>{couponMsg.text}</span>
                     </p>
                   )}
@@ -797,7 +852,7 @@ export function BookSalesView({ book, loading = false }: BookSalesViewProps) {
         onRemoveItem={handleRemoveItem}
         appliedCoupon={appliedCoupon}
         onApplyCoupon={handleCartCouponApply}
-        onRemoveCoupon={() => setAppliedCoupon(null)}
+        onRemoveCoupon={handleRemoveCoupon}
         onOpenCheckout={() => {
           setIsCartOpen(false);
           setCheckoutSource('cart');
@@ -820,11 +875,12 @@ export function BookSalesView({ book, loading = false }: BookSalesViewProps) {
                 .join(', ')
         }
         totalAmount={checkoutSource === 'direct' ? finalPayable : cartTotalPayable}
+        appliedCouponCode={appliedCoupon?.code || null}
         onOrderSuccess={(orderId, summary, amount) => {
           setIsCheckoutOpen(false);
           if (checkoutSource === 'cart') {
             setCart([]);
-            setAppliedCoupon(null);
+            setAppliedCouponState(null);
           }
           setSuccessModalData({
             isOpen: true,

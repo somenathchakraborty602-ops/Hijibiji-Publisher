@@ -58,6 +58,8 @@ export interface Book {
   page_count?: string | number | null;
   genre?: string | null;
   publish_year?: string | null;
+  allowed_coupons?: string[] | null;
+  active_coupons?: string[] | null;
   created_at?: string;
   slug?: string;
 }
@@ -152,9 +154,10 @@ export function getDefaultAvailableFormat(book: Book): BookFormatKey {
 export interface Coupon {
   id?: string;
   code: string;
-  discount_type?: 'percentage' | 'fixed';
+  promoter_name?: string | null;
+  discount_type?: 'percentage' | 'flat' | 'fixed' | string;
   discount_value: number;
-  min_order_value: number;
+  min_order_value?: number | null;
   is_active: boolean;
   created_at?: string;
 }
@@ -167,6 +170,7 @@ export interface Order {
   shipping_address: string;
   total_amount: number;
   order_items: string;
+  applied_coupon?: string | null;
   payment_status: 'PENDING' | 'SUCCESS' | 'DELIVERED' | string;
 }
 
