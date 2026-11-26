@@ -48,7 +48,7 @@ interface SubmissionRecord {
   manuscript_title: string;
   genre: string;
   page_or_word_count?: string | null;
-  file_url: string;
+  file_url?: string | null;
   payment_status: string;
   transaction_id?: string | null;
   review_status?: string;
@@ -139,6 +139,10 @@ export default function AuthorSupportClient() {
     paymentSessionId: string;
     cashfreeOrderId: string;
   } | null>(null);
+  // Step 2: Post-payment manuscript upload state
+  const [uploadingManuscript, setUploadingManuscript] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [confirmingPaid, setConfirmingPaid] = useState(false);
   const [receipt, setReceipt] = useState<SubmissionRecord | null>(null);
 
@@ -222,6 +226,7 @@ export default function AuthorSupportClient() {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFileError(null);
+    setUploadError(null);
     const file = e.target.files?.[0] || null;
     if (!file) {
       setManuscriptFile(null);
@@ -245,6 +250,72 @@ export default function AuthorSupportClient() {
     }
 
     setManuscriptFile(file);
+  };
+
+  const handleManuscriptUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!receipt) return;
+    setUploadError(null);
+    setFileError(null);
+
+    if (!manuscriptFile) {
+      setFileError('অনুগ্রহ করে আপনার পাণ্ডুলিপির .doc বা .docx ফাইল নির্বাচন করুন।');
+      return;
+    }
+
+    setUploadingManuscript(true);
+    try {
+      const fileExt = (manuscriptFile.name.split('.').pop() || 'docx').toLowerCase();
+      const safeFileName = `${receipt.submission_code}-${Date.now()}.${fileExt}`;
+
+      const { error: uploadErr } = await supabase.storage
+        .from('manuscripts')
+        .upload(safeFileName, manuscriptFile, {
+          contentType:
+            manuscriptFile.type ||
+            (fileExt === 'doc'
+              ? 'application/msword'
+              : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'),
+          upsert: true,
+        });
+
+      if (uploadErr) {
+        throw new Error(`পাণ্ডুলিপি আপলোড করা যায়নি: ${uploadErr.message}`);
+      }
+
+      const { data: publicUrlData } = supabase.storage
+        .from('manuscripts')
+        .getPublicUrl(safeFileName);
+      const fileUrl = publicUrlData.publicUrl;
+
+      const { data: updatedRow, error: updateErr } = await supabase
+        .from('author_submissions')
+        .update({ file_url: fileUrl })
+        .eq('id', receipt.id)
+        .select('*')
+        .maybeSingle();
+
+      if (updateErr) {
+        throw new Error(`ডেটাবেসে ফাইলের তথ্য সংরক্ষণ করা যায়নি: ${updateErr.message}`);
+      }
+
+      setUploadedFileName(manuscriptFile.name);
+      setReceipt(
+        (updatedRow as SubmissionRecord) || {
+          ...receipt,
+          file_url: fileUrl,
+        }
+      );
+      setManuscriptFile(null);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (err: any) {
+      console.error('Manuscript upload error:', err);
+      setUploadError(
+        err?.message || 'পাণ্ডুলিপি আপলোড করতে ত্রুটি হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।'
+      );
+    } finally {
+      setUploadingManuscript(false);
+    }
   };
 
   const openCashfreeCheckout = async (paymentSessionId: string) => {
@@ -308,66 +379,49 @@ export default function AuthorSupportClient() {
       return;
     }
 
-    if (!manuscriptFile) {
-      setFormError('অনুগ্রহ করে আপনার পাণ্ডুলিপির .doc বা .docx ফাইল আপলোড করুন।');
-      return;
-    }
-
     if (!consentChecked) {
       setFormError('জমা দেওয়ার আগে শর্তাবলীর সম্মতি বক্সে টিক দিন।');
       return;
     }
 
     setSubmitting(true);
-    setStatusMessage('আপনার পাণ্ডুলিপি নিরাপদ ক্লাউড স্টোরেজে আপলোড হচ্ছে...');
+    setStatusMessage('আপনার আবেদন ডেটাবেসে নিবন্ধন হচ্ছে...');
 
     try {
       // 1. Generate unique Submission Code: HJB-ASP-XXXX
       const submissionCode = generateSubmissionCode();
 
-      // 2. Upload .doc/.docx to Supabase Storage bucket 'manuscripts'
-      const fileExt = (manuscriptFile.name.split('.').pop() || 'docx').toLowerCase();
-      const safeFileName = `${submissionCode}-${Date.now()}.${fileExt}`;
+      // 2. Insert record into Supabase 'author_submissions' table with payment_status: 'Pending'
+      //    (Manuscript file will be uploaded in Step 2 after successful ₹500 payment)
+      const baseInsertPayload = {
+        submission_code: submissionCode,
+        author_name: authorName.trim(),
+        whatsapp: cleanWhatsapp,
+        email: email.trim(),
+        manuscript_title: manuscriptTitle.trim(),
+        genre,
+        page_or_word_count: pageOrWordCount.trim() || null,
+        payment_status: 'Pending',
+        declaration_accepted: true,
+        declaration_timestamp: new Date().toISOString(),
+      };
 
-      const { error: uploadErr } = await supabase.storage
-        .from('manuscripts')
-        .upload(safeFileName, manuscriptFile, {
-          contentType:
-            manuscriptFile.type ||
-            (fileExt === 'doc'
-              ? 'application/msword'
-              : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'),
-          upsert: true,
-        });
-
-      if (uploadErr) {
-        throw new Error(`পাণ্ডুলিপি আপলোড করা যায়নি: ${uploadErr.message}`);
-      }
-
-      const { data: publicUrlData } = supabase.storage
-        .from('manuscripts')
-        .getPublicUrl(safeFileName);
-      const fileUrl = publicUrlData.publicUrl;
-
-      // 3. Insert record into Supabase 'author_submissions' table with payment_status: 'Pending'
-      setStatusMessage('আপনার আবেদন ডেটাবেসে নিবন্ধন হচ্ছে...');
-      const { data: insertedRow, error: insertErr } = await supabase
+      let { data: insertedRow, error: insertErr } = await supabase
         .from('author_submissions')
-        .insert({
-          submission_code: submissionCode,
-          author_name: authorName.trim(),
-          whatsapp: cleanWhatsapp,
-          email: email.trim(),
-          manuscript_title: manuscriptTitle.trim(),
-          genre,
-          page_or_word_count: pageOrWordCount.trim() || null,
-          file_url: fileUrl,
-          payment_status: 'Pending',
-          declaration_accepted: true,
-          declaration_timestamp: new Date().toISOString(),
-        })
+        .insert({ ...baseInsertPayload, file_url: null })
         .select('*')
         .single();
+
+      // Graceful fallback if 'file_url' has a NOT NULL constraint in Supabase
+      if (insertErr && insertErr.message?.toLowerCase().includes('file_url')) {
+        const retryRes = await supabase
+          .from('author_submissions')
+          .insert({ ...baseInsertPayload, file_url: '' })
+          .select('*')
+          .single();
+        insertedRow = retryRes.data;
+        insertErr = retryRes.error;
+      }
 
       if (insertErr || !insertedRow) {
         throw new Error(
@@ -377,7 +431,7 @@ export default function AuthorSupportClient() {
 
       const submissionRecord = insertedRow as SubmissionRecord;
 
-      // 4. Create Cashfree v3 payment session for ₹500 via /api/create-cashfree-order
+      // 3. Create Cashfree v3 payment session for ₹500 via /api/create-cashfree-order
       setStatusMessage('₹৫০০ মূল্যায়ন ফি-এর জন্য ক্যাশফ্রি পেমেন্ট সেশন তৈরি হচ্ছে...');
       const cfPayload = {
         order_id: submissionCode,
@@ -428,7 +482,7 @@ export default function AuthorSupportClient() {
 
       const cfOrderId = String(resData.order_id || submissionCode);
 
-      // 5. Open Cashfree v3 Checkout in new tab
+      // 4. Open Cashfree v3 Checkout in new tab
       setStatusMessage('নতুন ট্যাবে ক্যাশফ্রি পেমেন্ট গেটওয়ে খোলা হচ্ছে...');
       await openCashfreeCheckout(resData.payment_session_id);
 
@@ -442,7 +496,7 @@ export default function AuthorSupportClient() {
     } catch (err: any) {
       console.error('Author submission error:', err);
       setFormError(
-        err?.message || 'পাণ্ডুলিপি জমা দিতে ত্রুটি দেখা দিয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।'
+        err?.message || 'আবেদন প্রক্রিয়াকরণে ত্রুটি দেখা দিয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।'
       );
       setStatusMessage(null);
     } finally {
@@ -528,103 +582,253 @@ export default function AuthorSupportClient() {
           </div>
         </section>
 
-        {/* CONFIRMATION RECEIPT SCREEN (Shown after successful ₹500 payment) */}
+        {/* STEP 2: POST-PAYMENT UPLOAD SCREEN OR FINAL CONFIRMATION RECEIPT */}
         {receipt ? (
-          <section className="max-w-2xl mx-auto bg-white rounded-3xl border border-emerald-200 shadow-xl overflow-hidden">
-            <div className="bg-gradient-to-r from-emerald-900 to-emerald-800 px-6 py-7 text-center text-white space-y-2">
-              <div className="w-16 h-16 rounded-full bg-white/15 border border-amber-300/60 flex items-center justify-center mx-auto">
-                <CheckCircle2 className="w-9 h-9 text-amber-300" />
-              </div>
-              <h2 className="text-2xl font-bold font-serif-bn">
-                পাণ্ডুলিপি জমা ও পেমেন্ট সফল হয়েছে!
-              </h2>
-              <p className="text-xs sm:text-sm text-emerald-100">
-                হিজিবিজি পাবলিশার্স Author Support Program — অফিসিয়াল কনফার্মেশন রসিদ
-              </p>
-            </div>
-
-            <div className="p-6 sm:p-8 space-y-6">
-              {/* Primary IDs */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="rounded-2xl bg-emerald-50/80 border border-emerald-200 p-4">
-                  <p className="text-xs font-semibold text-emerald-800">Submission ID</p>
-                  <p className="text-lg font-bold font-mono text-emerald-950 mt-1 tabular-nums">
-                    {receipt.submission_code}
-                  </p>
+          !receipt.file_url || !receipt.file_url.trim() ? (
+            /* STEP 2A: THANK YOU & POST-PAYMENT MANUSCRIPT UPLOAD SCREEN */
+            <section className="max-w-2xl mx-auto bg-white rounded-3xl border border-emerald-200 shadow-xl overflow-hidden">
+              <div className="bg-gradient-to-r from-emerald-900 to-emerald-800 px-6 py-7 text-center text-white space-y-2">
+                <div className="w-16 h-16 rounded-full bg-white/15 border border-amber-300/60 flex items-center justify-center mx-auto">
+                  <CheckCircle2 className="w-9 h-9 text-amber-300" />
                 </div>
-                <div className="rounded-2xl bg-amber-50/80 border border-amber-200 p-4">
-                  <p className="text-xs font-semibold text-amber-900">Transaction ID</p>
-                  <p className="text-sm sm:text-base font-bold font-mono text-stone-900 mt-1 break-all tabular-nums">
-                    {receipt.transaction_id || 'VERIFIED'}
-                  </p>
-                </div>
+                <p className="text-xs font-bold uppercase tracking-wider text-amber-300">
+                  ধাপ ২ / ২ · পাণ্ডুলিপি আপলোড
+                </p>
+                <h2 className="text-2xl font-bold font-serif-bn">
+                  পেমেন্ট সফল হয়েছে! এবার আপনার পাণ্ডুলিপি আপলোড করুন
+                </h2>
+                <p className="text-xs sm:text-sm text-emerald-100">
+                  আপনার ₹৫০০ মূল্যায়ন ফি গৃহীত হয়েছে। নিচে আপনার পাণ্ডুলিপির MS Word ফাইল (.doc / .docx) আপলোড করে আবেদন সম্পূর্ণ করুন।
+                </p>
               </div>
 
-              {/* Details summary */}
-              <div className="rounded-2xl border border-stone-200 divide-y divide-stone-100 text-sm">
-                <div className="px-4 py-3 flex justify-between gap-4">
-                  <span className="text-stone-500">লেখকের নাম</span>
-                  <span className="font-semibold text-stone-900 text-right">{receipt.author_name}</span>
+              <div className="p-6 sm:p-8 space-y-6">
+                {/* Primary IDs */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="rounded-2xl bg-emerald-50/80 border border-emerald-200 p-4">
+                    <p className="text-xs font-semibold text-emerald-800">Submission ID</p>
+                    <p className="text-lg font-bold font-mono text-emerald-950 mt-1 tabular-nums">
+                      {receipt.submission_code}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl bg-amber-50/80 border border-amber-200 p-4">
+                    <p className="text-xs font-semibold text-amber-900">Transaction ID</p>
+                    <p className="text-sm sm:text-base font-bold font-mono text-stone-900 mt-1 break-all tabular-nums">
+                      {receipt.transaction_id || 'VERIFIED'}
+                    </p>
+                  </div>
                 </div>
-                <div className="px-4 py-3 flex justify-between gap-4">
-                  <span className="text-stone-500">পাণ্ডুলিপির শিরোনাম</span>
-                  <span className="font-semibold font-serif-bn text-stone-900 text-right">
-                    {receipt.manuscript_title}
-                  </span>
+
+                {/* Details summary */}
+                <div className="rounded-2xl border border-stone-200 divide-y divide-stone-100 text-sm">
+                  <div className="px-4 py-3 flex justify-between gap-4">
+                    <span className="text-stone-500">লেখকের নাম</span>
+                    <span className="font-semibold text-stone-900 text-right">
+                      {receipt.author_name}
+                    </span>
+                  </div>
+                  <div className="px-4 py-3 flex justify-between gap-4">
+                    <span className="text-stone-500">পাণ্ডুলিপির শিরোনাম</span>
+                    <span className="font-semibold font-serif-bn text-stone-900 text-right">
+                      {receipt.manuscript_title}
+                    </span>
+                  </div>
+                  <div className="px-4 py-3 flex justify-between gap-4">
+                    <span className="text-stone-500">বিভাগ</span>
+                    <span className="font-semibold text-stone-900 text-right">
+                      {receipt.genre}
+                    </span>
+                  </div>
+                  <div className="px-4 py-3 flex justify-between gap-4">
+                    <span className="text-stone-500">পেমেন্ট স্ট্যাটাস</span>
+                    <span className="font-bold text-emerald-800 tabular-nums">₹৫০০ (Paid)</span>
+                  </div>
                 </div>
-                <div className="px-4 py-3 flex justify-between gap-4">
-                  <span className="text-stone-500">বিভাগ</span>
-                  <span className="font-semibold text-stone-900 text-right">{receipt.genre}</span>
+
+                {/* Post-payment .doc / .docx File Upload Form */}
+                <form onSubmit={handleManuscriptUpload} className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="block text-xs sm:text-sm font-semibold text-stone-800">
+                      পাণ্ডুলিপি ফাইল আপলোড করুন (শুধুমাত্র .doc / .docx, সর্বোচ্চ 10MB) *
+                    </label>
+
+                    <label className="flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-emerald-800/40 bg-emerald-50/50 hover:bg-emerald-50/90 px-5 py-7 text-center cursor-pointer transition">
+                      <div className="w-12 h-12 rounded-2xl bg-white border border-emerald-200 text-emerald-800 flex items-center justify-center shadow-2xs">
+                        {manuscriptFile ? (
+                          <FileText className="w-6 h-6 text-emerald-700" />
+                        ) : (
+                          <UploadCloud className="w-6 h-6 text-emerald-800" />
+                        )}
+                      </div>
+                      {manuscriptFile ? (
+                        <div className="space-y-0.5">
+                          <p className="text-sm font-bold text-emerald-950 break-all">
+                            {manuscriptFile.name}
+                          </p>
+                          <p className="text-xs text-stone-500 tabular-nums">
+                            {(manuscriptFile.size / (1024 * 1024)).toFixed(2)} MB · পরিবর্তন করতে ক্লিক করুন
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-0.5">
+                          <p className="text-sm font-semibold text-stone-800">
+                            ডিভাইস থেকে আপনার পাণ্ডুলিপির MS Word ফাইল (.doc / .docx) নির্বাচন করুন
+                          </p>
+                          <p className="text-xs text-stone-500">
+                            সর্বোচ্চ ফাইল সাইজ: 10MB · PDF বা ছবি গ্রহণযোগ্য নয়
+                          </p>
+                        </div>
+                      )}
+                      <input
+                        type="file"
+                        accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        onChange={handleFileChange}
+                        disabled={uploadingManuscript}
+                        className="sr-only"
+                      />
+                    </label>
+
+                    {fileError && (
+                      <p className="text-xs font-medium text-red-600 flex items-center gap-1.5">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                        <span>{fileError}</span>
+                      </p>
+                    )}
+
+                    {uploadError && (
+                      <div className="rounded-2xl bg-red-50 border border-red-200 p-3.5 text-xs text-red-700 flex items-start gap-2">
+                        <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                        <span>{uploadError}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={!manuscriptFile || uploadingManuscript}
+                    className="w-full py-3.5 px-6 rounded-2xl bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-sm sm:text-base transition shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <UploadCloud className="w-4 h-4 text-amber-300 shrink-0" />
+                    <span>
+                      {uploadingManuscript
+                        ? 'পাণ্ডুলিপি আপলোড হচ্ছে...'
+                        : 'পাণ্ডুলিপি আপলোড করুন ও চূড়ান্ত জমা দিন'}
+                    </span>
+                  </button>
+                </form>
+              </div>
+            </section>
+          ) : (
+            /* STEP 2B: FINAL CONFIRMATION RECEIPT SCREEN (Shown after manuscript upload completes) */
+            <section className="max-w-2xl mx-auto bg-white rounded-3xl border border-emerald-200 shadow-xl overflow-hidden">
+              <div className="bg-gradient-to-r from-emerald-900 to-emerald-800 px-6 py-7 text-center text-white space-y-2">
+                <div className="w-16 h-16 rounded-full bg-white/15 border border-amber-300/60 flex items-center justify-center mx-auto">
+                  <CheckCircle2 className="w-9 h-9 text-amber-300" />
                 </div>
-                <div className="px-4 py-3 flex justify-between gap-4">
-                  <span className="text-stone-500">পরিশোধিত মূল্যায়ন ফি</span>
-                  <span className="font-bold text-emerald-800 tabular-nums">₹৫০০ (Paid)</span>
-                </div>
+                <h2 className="text-2xl font-bold font-serif-bn">
+                  আপনার পাণ্ডুলিপি সফলভাবে জমা হয়েছে!
+                </h2>
+                <p className="text-xs sm:text-sm text-emerald-100">
+                  হিজিবিজি পাবলিশার্স Author Support Program — অফিসিয়াল কনফার্মেশন রসিদ
+                </p>
               </div>
 
-              {/* Originality & Copyright Declaration Confirmation Note */}
-              <div className="rounded-2xl bg-emerald-50/90 border border-emerald-200 px-4 py-3.5 flex items-center gap-2.5 text-xs sm:text-sm font-semibold text-emerald-900">
-                <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
-                <span>মৌলিকত্ব ও কপিরাইট ঘোষণাপত্র গৃহীত হয়েছে</span>
-              </div>
+              <div className="p-6 sm:p-8 space-y-6">
+                {/* Primary IDs */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="rounded-2xl bg-emerald-50/80 border border-emerald-200 p-4">
+                    <p className="text-xs font-semibold text-emerald-800">Submission ID</p>
+                    <p className="text-lg font-bold font-mono text-emerald-950 mt-1 tabular-nums">
+                      {receipt.submission_code}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl bg-amber-50/80 border border-amber-200 p-4">
+                    <p className="text-xs font-semibold text-amber-900">Transaction ID</p>
+                    <p className="text-sm sm:text-base font-bold font-mono text-stone-900 mt-1 break-all tabular-nums">
+                      {receipt.transaction_id || 'VERIFIED'}
+                    </p>
+                  </div>
+                </div>
 
-              {/* 90-Day Guarantee Box */}
-              <div className="rounded-2xl bg-gradient-to-br from-amber-50 to-emerald-50/60 border border-amber-200 p-4 sm:p-5 flex items-start gap-3">
-                <CalendarClock className="w-5 h-5 text-emerald-800 shrink-0 mt-0.5" />
-                <div className="space-y-1 text-xs sm:text-sm text-stone-700 leading-relaxed">
-                  <p className="font-bold text-emerald-950">
-                    ৯০ দিনের সম্পাদকীয় মূল্যায়ন ও ১০০% রিফান্ড গ্যারান্টি
-                  </p>
-                  <p>
-                    আপনার পাণ্ডুলিপি আমাদের সম্পাদকমণ্ডলীর কাছে পৌঁছে গেছে।{' '}
-                    <strong className="text-stone-900">
-                      {formatDateBn(receipt.refund_deadline)}
-                    </strong>{' '}
-                    তারিখের মধ্যে মূল্যায়ন রিপোর্ট বা প্রকাশনা সিদ্ধান্ত না জানালে আপনার ₹৫০০ সম্পূর্ণ ফেরত দেওয়া হবে।
-                  </p>
+                {/* Details summary */}
+                <div className="rounded-2xl border border-stone-200 divide-y divide-stone-100 text-sm">
+                  <div className="px-4 py-3 flex justify-between gap-4">
+                    <span className="text-stone-500">লেখকের নাম</span>
+                    <span className="font-semibold text-stone-900 text-right">
+                      {receipt.author_name}
+                    </span>
+                  </div>
+                  <div className="px-4 py-3 flex justify-between gap-4">
+                    <span className="text-stone-500">পাণ্ডুলিপির শিরোনাম</span>
+                    <span className="font-semibold font-serif-bn text-stone-900 text-right">
+                      {receipt.manuscript_title}
+                    </span>
+                  </div>
+                  <div className="px-4 py-3 flex justify-between gap-4">
+                    <span className="text-stone-500">বিভাগ</span>
+                    <span className="font-semibold text-stone-900 text-right">
+                      {receipt.genre}
+                    </span>
+                  </div>
+                  <div className="px-4 py-3 flex justify-between gap-4">
+                    <span className="text-stone-500">আপলোডকৃত ফাইল</span>
+                    <span className="font-semibold text-emerald-800 text-right inline-flex items-center gap-1.5">
+                      <FileText className="w-3.5 h-3.5 shrink-0" />
+                      <span className="break-all">
+                        {uploadedFileName || 'পাণ্ডুলিপি ফাইল সংযুক্ত (.docx)'}
+                      </span>
+                    </span>
+                  </div>
+                  <div className="px-4 py-3 flex justify-between gap-4">
+                    <span className="text-stone-500">পরিশোধিত মূল্যায়ন ফি</span>
+                    <span className="font-bold text-emerald-800 tabular-nums">₹৫০০ (Paid)</span>
+                  </div>
+                </div>
+
+                {/* Originality & Copyright Declaration Confirmation Note */}
+                <div className="rounded-2xl bg-emerald-50/90 border border-emerald-200 px-4 py-3.5 flex items-center gap-2.5 text-xs sm:text-sm font-semibold text-emerald-900">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
+                  <span>মৌলিকত্ব ও কপিরাইট ঘোষণাপত্র গৃহীত হয়েছে</span>
+                </div>
+
+                {/* 90-Day Guarantee Box */}
+                <div className="rounded-2xl bg-gradient-to-br from-amber-50 to-emerald-50/60 border border-amber-200 p-4 sm:p-5 flex items-start gap-3">
+                  <CalendarClock className="w-5 h-5 text-emerald-800 shrink-0 mt-0.5" />
+                  <div className="space-y-1 text-xs sm:text-sm text-stone-700 leading-relaxed">
+                    <p className="font-bold text-emerald-950">
+                      ৯০ দিনের সম্পাদকীয় মূল্যায়ন ও ১০০% রিফান্ড গ্যারান্টি
+                    </p>
+                    <p>
+                      আপনার পাণ্ডুলিপি আমাদের সম্পাদকমণ্ডলীর কাছে পৌঁছে গেছে।{' '}
+                      <strong className="text-stone-900">
+                        {formatDateBn(receipt.refund_deadline)}
+                      </strong>{' '}
+                      তারিখের মধ্যে মূল্যায়ন রিপোর্ট বা প্রকাশনা সিদ্ধান্ত না জানালে আপনার ₹৫০০ সম্পূর্ণ ফেরত দেওয়া হবে।
+                    </p>
+                  </div>
+                </div>
+
+                {/* Receipt Actions */}
+                <div className="flex flex-col sm:flex-row gap-3 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    className="flex-1 py-3 px-4 rounded-2xl bg-stone-900 hover:bg-stone-800 text-white font-semibold text-sm transition flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Printer className="w-4 h-4" />
+                    <span>রসিদ প্রিন্ট / সেভ করুন</span>
+                  </button>
+                  <Link
+                    href="/"
+                    className="flex-1 py-3 px-4 rounded-2xl bg-emerald-800 hover:bg-emerald-900 text-white font-semibold text-sm transition flex items-center justify-center gap-2"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                    <span>হোমপেজে ফিরে যান</span>
+                  </Link>
                 </div>
               </div>
-
-              {/* Receipt Actions */}
-              <div className="flex flex-col sm:flex-row gap-3 pt-1">
-                <button
-                  type="button"
-                  onClick={() => window.print()}
-                  className="flex-1 py-3 px-4 rounded-2xl bg-stone-900 hover:bg-stone-800 text-white font-semibold text-sm transition flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <Printer className="w-4 h-4" />
-                  <span>রসিদ প্রিন্ট / সেভ করুন</span>
-                </button>
-                <Link
-                  href="/"
-                  className="flex-1 py-3 px-4 rounded-2xl bg-emerald-800 hover:bg-emerald-900 text-white font-semibold text-sm transition flex items-center justify-center gap-2"
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                  <span>হোমপেজে ফিরে যান</span>
-                </Link>
-              </div>
-            </div>
-          </section>
+            </section>
+          )
         ) : (
           <>
             {/* 1. TOP PROGRAM TERMS SECTION (4 Clean Cards) */}
@@ -690,7 +894,7 @@ export default function AuthorSupportClient() {
                       Submission ID: <span className="font-mono text-emerald-900">{pendingSession.record.submission_code}</span>
                     </h3>
                     <p className="text-xs sm:text-sm text-stone-600 leading-relaxed">
-                      আপনার পাণ্ডুলিপি <strong>&ldquo;{pendingSession.record.manuscript_title}&rdquo;</strong> সংরক্ষিত হয়েছে (Status: Pending)। নতুন ট্যাবে খোলা ক্যাশফ্রি পেমেন্ট গেটওয়েতে ₹৫০০ পেমেন্ট সম্পন্ন করে নিচের বোতামে ক্লিক করে আপনার কনফার্মেশন রসিদ সংগ্রহ করুন।
+                      আপনার আবেদন <strong>&ldquo;{pendingSession.record.manuscript_title}&rdquo;</strong> নিবন্ধিত হয়েছে (Status: Pending)। নতুন ট্যাবে খোলা ক্যাশফ্রি পেমেন্ট গেটওয়েতে ₹৫০০ পেমেন্ট সম্পন্ন করে নিচের বোতামে ক্লিক করুন — পরবর্তী ধাপে আপনার পাণ্ডুলিপি (.doc / .docx) আপলোড করতে পারবেন।
                     </p>
                   </div>
                   <button
@@ -729,21 +933,24 @@ export default function AuthorSupportClient() {
                     <span>
                       {confirmingPaid
                         ? 'যাচাই হচ্ছে...'
-                        : 'পেমেন্ট সম্পন্ন হয়েছে — রসিদ দেখুন'}
+                        : 'পেমেন্ট সম্পন্ন — পাণ্ডুলিপি আপলোড করুন'}
                     </span>
                   </button>
                 </div>
               </section>
             )}
 
-            {/* 2. MANUSCRIPT SUBMISSION FORM */}
+            {/* 2. STEP 1: DETAILS & PAYMENT FORM (Manuscript upload happens in Step 2 after payment) */}
             <section className="max-w-3xl mx-auto bg-white rounded-3xl border border-stone-200/90 shadow-md overflow-hidden">
               <div className="px-6 py-5 sm:px-8 sm:py-6 border-b border-stone-100 bg-gradient-to-r from-emerald-50/70 via-amber-50/50 to-white">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 mb-1">
+                  ধাপ ১ / ২ · লেখক ও পাণ্ডুলিপির তথ্য এবং ₹৫০০ মূল্যায়ন ফি
+                </p>
                 <h2 className="text-xl sm:text-2xl font-bold font-serif-bn text-stone-900">
                   পাণ্ডুলিপি জমা দেওয়ার আবেদন ফর্ম
                 </h2>
                 <p className="text-xs sm:text-sm text-stone-600 mt-1">
-                  সঠিক তথ্য ও আপনার সম্পূর্ণ পাণ্ডুলিপির .doc / .docx ফাইল আপলোড করে ₹৫০০ মূল্যায়ন ফি পরিশোধ করুন।
+                  প্রথমে আপনার তথ্য দিয়ে ₹৫০০ মূল্যায়ন ফি পরিশোধ করুন; সফল পেমেন্টের পরপরই পরবর্তী ধাপে আপনার .doc / .docx পাণ্ডুলিপি আপলোড করতে পারবেন।
                 </p>
               </div>
 
@@ -880,55 +1087,6 @@ export default function AuthorSupportClient() {
                   </div>
                 </div>
 
-                {/* .doc / .docx File Upload */}
-                <div className="space-y-2">
-                  <label className="block text-xs sm:text-sm font-semibold text-stone-800">
-                    পাণ্ডুলিপি ফাইল আপলোড করুন (শুধুমাত্র .doc / .docx, সর্বোচ্চ 10MB) *
-                  </label>
-
-                  <label className="flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-emerald-800/30 bg-emerald-50/40 hover:bg-emerald-50/80 px-5 py-6 text-center cursor-pointer transition">
-                    <div className="w-11 h-11 rounded-2xl bg-white border border-emerald-200 text-emerald-800 flex items-center justify-center shadow-2xs">
-                      {manuscriptFile ? (
-                        <FileText className="w-5 h-5 text-emerald-700" />
-                      ) : (
-                        <UploadCloud className="w-5 h-5 text-emerald-800" />
-                      )}
-                    </div>
-                    {manuscriptFile ? (
-                      <div className="space-y-0.5">
-                        <p className="text-sm font-bold text-emerald-950 break-all">
-                          {manuscriptFile.name}
-                        </p>
-                        <p className="text-xs text-stone-500 tabular-nums">
-                          {(manuscriptFile.size / (1024 * 1024)).toFixed(2)} MB · পরিবর্তন করতে ক্লিক করুন
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="space-y-0.5">
-                        <p className="text-sm font-semibold text-stone-800">
-                          ডিভাইস থেকে MS Word ফাইল (.doc / .docx) নির্বাচন করুন
-                        </p>
-                        <p className="text-xs text-stone-500">
-                          সর্বোচ্চ ফাইল সাইজ: 10MB · PDF বা ছবি গ্রহণযোগ্য নয়
-                        </p>
-                      </div>
-                    )}
-                    <input
-                      type="file"
-                      accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                      onChange={handleFileChange}
-                      className="sr-only"
-                    />
-                  </label>
-
-                  {fileError && (
-                    <p className="text-xs font-medium text-red-600 flex items-center gap-1.5">
-                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                      <span>{fileError}</span>
-                    </p>
-                  )}
-                </div>
-
                 {/* Mandatory Consent Checkbox (Originality & Indemnity Declaration) */}
                 <div className="rounded-2xl bg-amber-50/70 border border-amber-200/90 p-4 sm:p-5">
                   <label className="flex items-start gap-3 cursor-pointer select-none">
@@ -955,7 +1113,7 @@ export default function AuthorSupportClient() {
                     <span>
                       {submitting
                         ? 'প্রক্রিয়াকরণ হচ্ছে...'
-                        : 'পাণ্ডুলিপি জমা দিন ও ₹৫০০ পেমেন্ট করুন'}
+                        : '₹৫০০ মূল্যায়ন ফি পরিশোধ করুন (পরবর্তী ধাপে পাণ্ডুলিপি আপলোড)'}
                     </span>
                   </button>
                   <p className="text-[11px] text-center text-stone-500">
