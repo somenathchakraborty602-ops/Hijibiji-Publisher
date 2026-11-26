@@ -339,6 +339,50 @@ export default function AdminPage() {
     }
   };
 
+  const handleDeleteSubmission = async (sub: AuthorSubmission) => {
+    const confirmed = window.confirm(
+      'আপনি কি নিশ্চিতভাবে এই এন্ট্রিটি স্থায়ীভাবে ডিলিট করতে চান?'
+    );
+    if (!confirmed) return;
+
+    setUpdatingSubmissionId(sub.id);
+    setSubmissionsError(null);
+    try {
+      const { error } = await supabase
+        .from('author_submissions')
+        .delete()
+        .eq('id', sub.id);
+
+      if (error) throw error;
+
+      // Attempt to remove manuscript file from Supabase 'manuscripts' storage bucket if file_url exists
+      if (sub.file_url && sub.file_url.trim()) {
+        const storageInfo = extractStoragePathFromUrl(sub.file_url);
+        const bucketName = storageInfo?.bucket || 'manuscripts';
+        const filePath =
+          storageInfo?.path ||
+          decodeURIComponent(sub.file_url.split('/manuscripts/')[1] || '').trim();
+
+        if (filePath) {
+          await supabase.storage
+            .from(bucketName)
+            .remove([filePath])
+            .catch((storageErr) => {
+              console.warn('Could not remove manuscript file from storage:', storageErr);
+            });
+        }
+      }
+
+      setAuthorSubmissions((prev) => prev.filter((item) => item.id !== sub.id));
+    } catch (err: any) {
+      setSubmissionsError(
+        'এন্ট্রি ডিলিট করতে সমস্যা হয়েছে: ' + (err?.message || 'অজানা ত্রুটি')
+      );
+    } finally {
+      setUpdatingSubmissionId(null);
+    }
+  };
+
   // Fetch data on login
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -2585,32 +2629,46 @@ export default function AdminPage() {
                               )}
                             </td>
 
-                            {/* Status Dropdown */}
+                            {/* Status Dropdown & Delete Button */}
                             <td className="p-3.5 align-top whitespace-nowrap">
-                              <select
-                                value={currentReviewStatus}
-                                disabled={updatingSubmissionId === sub.id}
-                                onChange={(e) =>
-                                  handleReviewStatusChange(sub.id, e.target.value)
-                                }
-                                className={`text-xs font-semibold rounded-xl px-2.5 py-2 border outline-none cursor-pointer transition shadow-2xs disabled:opacity-60 ${
-                                  currentReviewStatus === 'Selected for 30-Day Promo'
-                                    ? 'bg-emerald-50 text-emerald-900 border-emerald-300'
-                                    : currentReviewStatus === 'Feedback Report Sent'
-                                    ? 'bg-sky-50 text-sky-900 border-sky-300'
-                                    : currentReviewStatus === 'Rejected / Refunded'
-                                    ? 'bg-red-50 text-red-800 border-red-300'
-                                    : currentReviewStatus === 'Under Review'
-                                    ? 'bg-amber-50 text-amber-900 border-amber-300'
-                                    : 'bg-white text-stone-800 border-stone-300'
-                                }`}
-                              >
-                                {AUTHOR_REVIEW_STATUS_OPTIONS.map((opt) => (
-                                  <option key={opt} value={opt}>
-                                    {opt}
-                                  </option>
-                                ))}
-                              </select>
+                              <div className="flex items-center gap-2">
+                                <select
+                                  value={currentReviewStatus}
+                                  disabled={updatingSubmissionId === sub.id}
+                                  onChange={(e) =>
+                                    handleReviewStatusChange(sub.id, e.target.value)
+                                  }
+                                  className={`text-xs font-semibold rounded-xl px-2.5 py-2 border outline-none cursor-pointer transition shadow-2xs disabled:opacity-60 ${
+                                    currentReviewStatus === 'Selected for 30-Day Promo'
+                                      ? 'bg-emerald-50 text-emerald-900 border-emerald-300'
+                                      : currentReviewStatus === 'Feedback Report Sent'
+                                      ? 'bg-sky-50 text-sky-900 border-sky-300'
+                                      : currentReviewStatus === 'Rejected / Refunded'
+                                      ? 'bg-red-50 text-red-800 border-red-300'
+                                      : currentReviewStatus === 'Under Review'
+                                      ? 'bg-amber-50 text-amber-900 border-amber-300'
+                                      : 'bg-white text-stone-800 border-stone-300'
+                                  }`}
+                                >
+                                  {AUTHOR_REVIEW_STATUS_OPTIONS.map((opt) => (
+                                    <option key={opt} value={opt}>
+                                      {opt}
+                                    </option>
+                                  ))}
+                                </select>
+
+                                <button
+                                  type="button"
+                                  disabled={updatingSubmissionId === sub.id}
+                                  onClick={() => handleDeleteSubmission(sub)}
+                                  title="এন্ট্রি ডিলিট করুন"
+                                  aria-label={`Delete ${sub.submission_code}`}
+                                  className="inline-flex items-center gap-1 bg-red-600 hover:bg-red-700 text-white font-semibold px-2.5 py-2 rounded-xl transition shadow-2xs text-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                                  <span>Delete</span>
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
